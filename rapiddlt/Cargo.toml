@@ -1,0 +1,13 @@
+[package]
+name = "rapiddlt"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+matchit = { path = "../matchit" }
+zerocopy = "0.7.32"
+zerocopy-derive = "0.7.32"
+memmap = "0.7.0"
+memchr = "2.3.1"
