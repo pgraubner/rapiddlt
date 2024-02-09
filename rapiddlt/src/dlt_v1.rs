@@ -1,14 +1,43 @@
 
 use matchit::{NoOffsetIterator, TSearchable, searchit::{SearchIterator, RevSearchIterator,}, readit::{ReadIterator}, read_typed_offset, read_valid_offset, TIterator};
-use zerocopy_derive::{FromBytes, FromZeroes};
-use zerocopy::byteorder::big_endian::{*};
+use zerocopy_derive::{AsBytes, FromBytes, FromZeroes};
+use zerocopy::{byteorder::big_endian::*, AsBytes};
 
-#[derive(FromBytes,FromZeroes,Debug)]
+#[derive(AsBytes,FromBytes,FromZeroes,Debug)]
 #[repr(C)]
 pub struct DltHTyp {
     htyp: u8
 }
 impl DltHTyp {
+    pub fn new(
+        is_extended_header: bool,
+        is_msb_first: bool,
+        is_with_ecu_id: bool,
+        is_with_session_id: bool,
+        is_with_timestamp: bool,
+        version: u8
+    ) -> Self {
+        let mut htyp = 0b0000_0000;
+        if is_extended_header {
+            htyp |= 0b0000_0001;
+        }
+        if is_msb_first {
+            htyp |= 0b0000_0010;
+        }
+        if is_with_ecu_id {
+            htyp |= 0b0000_0100;
+        }
+        if is_with_session_id {
+            htyp |= 0b0000_1000;
+        }
+        if is_with_timestamp {
+            htyp |= 0b0001_0000;
+        }
+        htyp |= version << 5;
+
+        Self { htyp }
+    }
+
     #[inline(always)]
     fn is_extended_header(&self) -> bool {
         (self.htyp & DltHTypMask::UEH as u8) > 0
@@ -31,11 +60,11 @@ impl DltHTyp {
     }
     #[inline(always)]
     fn version(&self) -> u8 {
-        //self.htyp & DltHTypMask::VERS as u8
-        todo!()
+        (self.htyp & DltHTypMask::VERS as u8) >> 5
     }
 }
 
+#[derive(AsBytes)]
 #[repr(u8)]
 enum DltHTypMask {
     UEH  = 0x01, // Use Extended Header, UEH
@@ -46,20 +75,27 @@ enum DltHTypMask {
     VERS = 0xe0,
 }
 
-#[derive(FromBytes,FromZeroes,Debug)]
+#[derive(AsBytes,FromBytes,FromZeroes,Debug)]
 #[repr(C)]
 pub struct DltStandardHeader {
     pub header_type: DltHTyp,
     message_counter: u8,  // The message counter is increased with each sent DLT message
     length: U16, // Length of the complete message, without storage header
 }
+
 impl DltStandardHeader {
+    pub fn new(header_type: DltHTyp, message_counter: u8, length: u16) -> Self {
+        Self {
+            header_type, message_counter, length: U16::from(length)
+        }
+    }
+
     pub fn length(&self) -> usize {
         self.length.get() as usize
     }
 }
 
-#[derive(FromBytes,FromZeroes,Debug)]
+#[derive(AsBytes,FromBytes,FromZeroes,Debug)]
 #[repr(C)]
 pub struct DltStorageHeader {
     pub pattern: [u8;4], // This pattern should be DLT0x01
@@ -68,21 +104,46 @@ pub struct DltStorageHeader {
     pub ecu: [u8;4] // The ECU id is added, if it is not already in the DLT message itself
 }
 
-#[derive(FromBytes,FromZeroes,Debug)]
+impl DltStorageHeader {
+    pub fn new(
+        pattern: [u8;4],
+        secs: u32,
+        msecs: i32,
+        ecu: [u8;4]
+    ) -> Self {
+            DltStorageHeader {
+                pattern,
+                secs: U32::from(secs),
+                msecs: I32::from(msecs),
+                ecu,
+            }
+        }
+}
+
+#[derive(AsBytes,FromBytes,FromZeroes,Debug)]
 #[repr(C)]
 struct DltStandardHeaderExtra {
     pub ecu: [u8;4],            // < ECU id
     pub seid: U32,              // < Session number
     pub tmsp: U32               // < Timestamp since system start in 0.1 milliseconds
 }
-#[derive(FromBytes,FromZeroes,Debug)]
+
+
+#[derive(AsBytes,FromBytes,FromZeroes,Debug)]
 #[repr(C)]
-struct DltExtendedHeader {
+pub struct DltExtendedHeader {
     msin: u8,         // < messsage info
     noar: u8,         // < number of arguments
     apid: [u8; 4],    // < application id
     ctid: [u8; 4],    // < context id
 }
+
+impl DltExtendedHeader {
+    pub fn new(msin: u8, noar: u8, apid: [u8; 4], ctid: [u8; 4]) -> Self {
+        Self { msin, noar, apid, ctid }
+    }
+}
+
 use zerocopy::FromBytes;
 use std::mem;
 

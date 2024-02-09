@@ -6,7 +6,12 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
+
+### Fixed
 - test/test_gen.sh: fixed initial run
+
+### Added
+- dd_dlt: a tool to read input form stdin and to write the input as valid DLT payload to stdout
 
 ## [0.1.0] - 2024-01-23
 

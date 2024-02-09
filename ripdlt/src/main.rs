@@ -224,7 +224,7 @@ fn main() {
 
         "count" => {
             let r = count(mmap.as_slice());
-            println!("{:?} hello world messages", r);
+            println!("{:?} messages", r);
         }
         "count_hello_world" => {
             let r = count_hello_world(mmap.as_slice());
