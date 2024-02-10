@@ -1,7 +1,7 @@
 
 use matchit::{NoOffsetIterator, TSearchable, searchit::{SearchIterator, RevSearchIterator,}, readit::{ReadIterator}, read_typed_offset, read_valid_offset, TIterator};
 use zerocopy_derive::{AsBytes, FromBytes, FromZeroes};
-use zerocopy::{byteorder::big_endian::*, AsBytes};
+use zerocopy::{byteorder::big_endian::*, little_endian, AsBytes, LittleEndian};
 
 #[derive(AsBytes,FromBytes,FromZeroes,Debug)]
 #[repr(C)]
@@ -99,8 +99,8 @@ impl DltStandardHeader {
 #[repr(C)]
 pub struct DltStorageHeader {
     pub pattern: [u8;4], // This pattern should be DLT0x01
-    pub secs: U32,  // Seconds since 1.1.1970
-    pub msecs: I32, // Microseconds
+    pub secs: little_endian::U32,  // Seconds since 1.1.1970
+    pub msecs: little_endian::I32, // Microseconds
     pub ecu: [u8;4] // The ECU id is added, if it is not already in the DLT message itself
 }
 
@@ -113,8 +113,8 @@ impl DltStorageHeader {
     ) -> Self {
             DltStorageHeader {
                 pattern,
-                secs: U32::from(secs),
-                msecs: I32::from(msecs),
+                secs: little_endian::U32::from(secs),
+                msecs: little_endian::I32::from(msecs),
                 ecu,
             }
         }
@@ -279,6 +279,12 @@ mod tests {
 
     use super::*;
 
+    #[test]
+    fn storage_header() {
+        let sh = DltStorageHeader::ref_from_prefix(&[68, 76, 84,  1,  1,  0,  0,  0,  0,  0,  0,  0, 01, 99, 17, 49]);
+        println!("{:?}", sh);
+        assert!(sh.is_some());
+    }
     #[test]
     fn dlt_robust_iterator_none() {
         let buf = [68, 76, 84, 1, 226, 26, 74, 101, 79, 4, 1, 0, 69, 48, 48, 49, 68, 76, 84, 1, 226, 26, 74, 101, 79, 4, 1, 0, 69, 48, 48, 49, 68, 76, 84, 1,68, 76, 84, 1,68, 76, 84, 1];

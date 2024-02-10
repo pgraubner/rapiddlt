@@ -82,12 +82,11 @@ fn continuous_timestamp_histogram(mmap: DltBuffer) -> BTreeMap<usize, usize> {
     let mut it = dltit(&mmap.as_slice());
     let predicate = |a: DltStorageEntry<'_>, b: DltStorageEntry<'_>| b.storage_header.secs.get() >= a.storage_header.secs.get();
 
-    let result = it.by_ref()
-        .filter(|e| e.dlt.header.header_type.is_with_timestamp())
+    let mut result = it.by_ref()
         .matches(GroupBy::new(predicate))
-        .map(|r| r.1.dlt.timestamp().unwrap() - r.0.dlt.timestamp().unwrap())
+        .map(|r| r.1.storage_header.secs.get() - r.0.storage_header.secs.get())
     ;
-    result.histogram(|id| *id as usize / 10000 ).collect()
+    result.histogram(|ts| *ts as usize ).collect()
 }
 
 
@@ -205,21 +204,21 @@ fn main() {
             println!("Distribution of payload length:");
             let mut total_size = 0;
             for (k,v) in histogram_payload(mmap) {
-                let size = k*v / 1024;
-                println!("{}b: {}, overall: {} kB", k, v, size);
+                let size = k*v;
+                println!("{}b: {}, overall: {} kB", k, v, size / 1024);
                 total_size += size;
             }
-            println!("Payload in total: {} kB", total_size);
+            println!("Payload in total: {} kB", total_size / 1024);
         },
         "histogram_message_size" =>{
             println!("Distribution of DLT message length:");
             let mut total_size = 0;
             for (k,v) in histogram_message(mmap) {
-                let size = k*v / 1024;
-                println!("{}b: {}, overall: {} kB", k, v, size);
+                let size = k*v;
+                println!("{}b: {}, overall: {} kB", k, v, size /1024);
                 total_size += size;
             }
-            println!("DLT messages in total: {} kB", total_size);
+            println!("DLT messages in total: {} kB", total_size/1024);
         },
 
         "count" => {

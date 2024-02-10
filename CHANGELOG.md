@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Fixed
 - test/test_gen.sh: fixed initial run
+- DltStorageHeader: read and store timestamps in little endian
+- ripdlt: fixed histogram_timestamp
+- ripdlt: fixed kB size in histogram_payload_size, histogram_message_size
 
 ### Added
 - dd_dlt: a tool to read input form stdin and to write the input as valid DLT payload to stdout

@@ -33,8 +33,8 @@ fn main() -> Result<(), std::io::Error> {
         // DltStorageHeader
         let sh = DltStorageHeader::new(
             [b'D',b'L',b'T', 0x1],
-            0,
-            count as i32,
+            count / 100,
+            (count % 100) as i32 * 10000,
             ecuid.try_into().expect("ecuid wrong"));
 
         let len = 4 + 10 + 4 + payload_size;
@@ -44,8 +44,9 @@ fn main() -> Result<(), std::io::Error> {
 
         io::stdout().write(sh.as_bytes())?;
         io::stdout().write(h.as_bytes())?;
+        // TODO ecu_id, session_id
+        io::stdout().write(U32::from(count * 100).as_bytes())?;
         io::stdout().write(eh.as_bytes())?;
-        io::stdout().write(U32::from(count).as_bytes())?;
         io::stdout().write(buf.as_bytes())?;
 
         count += 1;
