@@ -1,7 +1,7 @@
 use std::{fs::File, io::{self, BufReader, Read}};
 
 use memmap::MmapOptions;
-use matchit::{search_marker, TSearchable};
+use matchit::searchable::{search_marker, SearchableMarkerTrait};
 
 pub enum DltBuffer {
     Mmap(memmap::Mmap),
@@ -32,7 +32,7 @@ impl DltBuffer {
             DltBuffer::Read(vector) => vector.as_slice(),
         }
     }
-    pub fn partition_from<'bytes, T: TSearchable<'bytes>>(bytes: &'bytes [u8], num: usize) -> Vec<&'bytes [u8]> {
+    pub fn partition_from<'bytes, T: SearchableMarkerTrait<'bytes>>(bytes: &'bytes [u8], num: usize) -> Vec<&'bytes [u8]> {
         let mut result: Vec<&[u8]> = vec![];
 
         let size = bytes.len() / num;
@@ -41,7 +41,7 @@ impl DltBuffer {
             match search_marker::<T>(&bytes[candidate.1..]) {
                 Some(idx) => {
                     // good case: we found a new DLT entry
-                    candidate.1 = candidate.1 + idx;
+                    candidate.1 += idx;
                 },
                 None => {
                     candidate.1 = bytes.len();
@@ -60,7 +60,7 @@ impl DltBuffer {
         result
 
     }
-    pub fn partition<'bytes, T: TSearchable<'bytes>>(&'bytes self, num: usize) -> Vec<&'bytes [u8]> {
+    pub fn partition<'bytes, T: SearchableMarkerTrait<'bytes>>(&'bytes self, num: usize) -> Vec<&'bytes [u8]> {
         let bytes = self.as_slice();
         Self::partition_from::<T>(bytes, num)
     }
@@ -70,6 +70,7 @@ impl DltBuffer {
 #[cfg(test)]
 mod tests {
     use crate::dlt_v1::DltStorageEntry;
+    use matchit::FromBytesReadableTrait;
 
     use super::*;
 

@@ -1,6 +1,11 @@
-use std::{marker::PhantomData, mem};
+use std::{marker::PhantomData};
 
-use memchr::{memmem::{self, FindIter, FindRevIter, Finder, FinderRev}};
+use crate::{TIterator};
+
+
+use memchr::{memmem::{self}};
+
+use super::SearchableMarkerTrait;
 
 pub type WithOffset<T> = (usize, T);
 
@@ -14,7 +19,7 @@ pub struct SearchIterator<'bytes, T>
 }
 
 impl<'bytes, T> TIterator<'bytes> for SearchIterator<'bytes, T>
-        where T: TSearchable<'bytes> {
+        where T: SearchableMarkerTrait<'bytes> {
     fn new(bytes: &'bytes [u8], offset: usize) -> SearchIterator<'bytes, T> {
         SearchIterator {offset, bytes, phantom: PhantomData,
             finder: memmem::Finder::new(T::marker()),
@@ -22,8 +27,9 @@ impl<'bytes, T> TIterator<'bytes> for SearchIterator<'bytes, T>
     }
 }
 impl<'bytes, T> SearchIterator<'bytes, T>
-        where T: TSearchable<'bytes> {
+        where T: SearchableMarkerTrait<'bytes> {
 
+    #[inline(always)]
     pub fn search(&self, bytes: &'bytes [u8], offset: usize) -> Option<WithOffset<T>> {
         if offset >= bytes.len() {
             return None
@@ -31,7 +37,7 @@ impl<'bytes, T> SearchIterator<'bytes, T>
         let mut candidate = self.finder.find(&bytes[offset..])?;
         candidate += offset;
 
-        let (_, t) = T::try_read(&bytes[candidate..])?;
+        let (_, t) = T::try_read_valid_marker(&bytes[candidate..])?;
         Some((candidate, t))
     }
 }
@@ -39,10 +45,11 @@ impl<'bytes, T> SearchIterator<'bytes, T>
 
 
 impl<'bytes, T> Iterator for SearchIterator<'bytes, T>
-    where T: TSearchable<'bytes>
+    where T: SearchableMarkerTrait<'bytes>
 {
     type Item = WithOffset<T>;
 
+    #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
         match self.search(self.bytes, self.offset) {
             Some((offset, t)) => {
@@ -70,21 +77,22 @@ pub struct RevSearchIterator<'bytes, T>
 }
 
 impl<'bytes, T> RevSearchIterator<'bytes, T>
-        where T: TSearchable<'bytes> {
+        where T: SearchableMarkerTrait<'bytes> {
 
+    #[inline(always)]
     pub fn search(&self, bytes: &'bytes [u8], offset: usize) -> Option<WithOffset<T>> {
         if offset > bytes.len() || offset == usize::MAX {
             return None
         }
         let candidate = self.finder.rfind(&bytes[..offset])?;
 
-        let (_, t) = T::try_read(&bytes[candidate..])?;
+        let (_, t) = T::try_read_valid_marker(&bytes[candidate..])?;
         Some((candidate, t))
     }
 }
 
 impl<'bytes, T> TIterator<'bytes> for RevSearchIterator<'bytes, T>
-        where T: TSearchable<'bytes> {
+        where T: SearchableMarkerTrait<'bytes> {
     fn new(bytes: &'bytes [u8], offset: usize) -> RevSearchIterator<'bytes, T> {
         RevSearchIterator {offset, bytes, phantom: PhantomData,
             finder: memmem::FinderRev::new(T::marker()),
@@ -93,10 +101,11 @@ impl<'bytes, T> TIterator<'bytes> for RevSearchIterator<'bytes, T>
 }
 
 impl<'bytes, T> Iterator for RevSearchIterator<'bytes, T>
-    where T: TSearchable<'bytes>
+    where T: SearchableMarkerTrait<'bytes>
 {
     type Item = WithOffset<T>;
 
+    #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
         match self.search(self.bytes, self.offset) {
             Some((offset, t)) => {
@@ -116,11 +125,4 @@ impl<'bytes, T> Iterator for RevSearchIterator<'bytes, T>
         }
     }
 }
-
-
-use zerocopy::{big_endian::U32, FromBytes};
-use zerocopy_derive::{FromBytes, FromZeroes};
-
-use crate::{TIterator, TSearchable};
-
 

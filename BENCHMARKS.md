@@ -12,24 +12,18 @@ Durations of periods where DLT storage header timestamps are continuous:
 ```bash
 > time target/release/ripdlt mmap histogram_timestamp test_gen/4_4gb_concat.dlt
 Durations of periods where DLT storage header timestamps are continuous:
-61-62 secs: 800
-72-73 secs: 800
-218-219 secs: 800
-256-257 secs: 4000
-264-265 secs: 800
-427490-427491 secs: 800
-429257-429258 secs: 800
-429268-429269 secs: 800
-429495-429496 secs: 800
+2-3 secs: 800
+2072-2073 secs: 800
+88744928-88744929 secs: 800
 
-real    0m1.646s
-user    0m1.417s
-sys     0m0.230s
+real    0m1.317s
+user    0m1.147s
+sys     0m0.169s
 ```
 
 Durations of periods where DLT timestamps are monotonic for the same ECU ID:
 ```bash
-> time target/release/ripdlt mmap histogram_timestamp test_gen/4_4gb_concat.dlt
+> time target/release/ripdlt mmap histogram_lifecycles test_gen/4_4gb_concat.dlt
 Distribution of lifecycle durations:
 0-1 secs: 1516801
 1-2 secs: 172800
@@ -42,9 +36,9 @@ Distribution of lifecycle durations:
 1766-1767 secs: 800
 2212-2213 secs: 799
 
-real    0m2.549s
-user    0m2.339s
-sys     0m0.211s
+real    0m2.061s
+user    0m1.851s
+sys     0m0.210s
 ```
 
 Distribution of the size of the DLT payload:

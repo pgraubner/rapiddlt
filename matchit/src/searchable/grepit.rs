@@ -1,7 +1,9 @@
 use std::marker::PhantomData;
 
 use regex::bytes::Regex;
-use crate::{WithOffset, TIterator, TSearchable, searchit::RevSearchIterator};
+use crate::{TIterator, WithOffset};
+
+use super::{searchit::RevSearchIterator, SearchableMarkerTrait};
 
 #[derive(Debug)]
 pub struct GrepIterator<'bytes, T>
@@ -14,7 +16,9 @@ pub struct GrepIterator<'bytes, T>
 }
 
 impl<'bytes, T>  GrepIterator<'bytes, T>
-        where T: TSearchable<'bytes> {
+where
+    T: SearchableMarkerTrait<'bytes>
+{
     pub fn new(pattern: &str, bytes: &'bytes [u8], offset: usize) -> GrepIterator<'bytes, T> {
         GrepIterator { offset, bytes, phantom: PhantomData,
             finder: Regex::new(pattern).unwrap(),
@@ -24,13 +28,14 @@ impl<'bytes, T>  GrepIterator<'bytes, T>
 }
 
 impl<'bytes, T> GrepIterator<'bytes, T>
-    where T: TSearchable<'bytes>
+    where T: SearchableMarkerTrait<'bytes>
 {
+    #[inline(always)]
     pub fn search(&self, bytes: &'bytes [u8], offset: usize) -> Option<WithOffset<T>> {
         if offset >= bytes.len() {
             return None
         }
-        let foundit = self.finder.find_at(&bytes, offset)?.range();
+        let foundit = self.finder.find_at(bytes, offset)?.range();
 
         match self.iter.search(bytes, foundit.start) {
             Some((_off, val)) => {
@@ -53,10 +58,11 @@ impl<'bytes, T> GrepIterator<'bytes, T>
 }
 
 impl<'bytes, T> Iterator for GrepIterator<'bytes, T>
-    where T: TSearchable<'bytes>
+    where T: SearchableMarkerTrait<'bytes>
 {
     type Item = WithOffset<T>;
 
+    #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
         let (offset, val) = self.search(self.bytes, self.offset)?;
 
@@ -79,7 +85,9 @@ pub struct RegExMatcherIterator<'bytes, T>
 }
 
 impl<'bytes, T>  RegExMatcherIterator<'bytes, T>
-        where T: TSearchable<'bytes> {
+where
+    T: SearchableMarkerTrait<'bytes>
+{
     pub fn new(pattern: &str, bytes: &'bytes [u8], offset: usize) -> RegExMatcherIterator<'bytes, T> {
         RegExMatcherIterator {offset, bytes, phantom: PhantomData,
             finder: Regex::new(pattern).unwrap(),
@@ -88,14 +96,16 @@ impl<'bytes, T>  RegExMatcherIterator<'bytes, T>
     }
 }
 impl<'bytes, T> RegExMatcherIterator<'bytes, T>
-    where T: TSearchable<'bytes>
+where
+    T: SearchableMarkerTrait<'bytes>
 {
+    #[inline(always)]
     pub fn capture(&self, bytes: &'bytes [u8], offset: usize) -> Option<WithOffset<(usize,usize)>> {
         if offset >= bytes.len() {
             return None
         }
         let mut locs = self.finder.capture_locations();
-        let captures = self.finder.captures_read_at(&mut locs, &bytes, offset)?;
+        let captures = self.finder.captures_read_at(&mut locs, bytes, offset)?;
 
         let foundit = captures.range();
 
@@ -119,10 +129,12 @@ impl<'bytes, T> RegExMatcherIterator<'bytes, T>
 }
 
 impl<'bytes, T> Iterator for RegExMatcherIterator<'bytes, T>
-    where T: TSearchable<'bytes>
+where
+    T: SearchableMarkerTrait<'bytes>
 {
     type Item = WithOffset<(usize,usize)>;
 
+    #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
         let (offset, val) = self.capture(self.bytes, self.offset)?;
 

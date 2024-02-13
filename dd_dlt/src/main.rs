@@ -1,8 +1,8 @@
 
-use std::{env, io::{self, ErrorKind, Read, Write}, u16};
+use std::{env, io::{self, Read, Write}, u16};
 
 use zerocopy::{big_endian::U32, AsBytes};
-use rapiddlt::dlt_v1::{DltEntry, DltExtendedHeader, DltHTyp, DltStandardHeader, DltStorageEntry, DltStorageHeader};
+use rapiddlt::dlt_v1::{DltExtendedHeader, DltHTyp, DltStandardHeader, DltStorageHeader};
 
 fn main() -> Result<(), std::io::Error> {
     let args: Vec<String> = env::args().collect();
@@ -24,7 +24,7 @@ fn main() -> Result<(), std::io::Error> {
     let mut buf = vec![0u8; payload_size as usize];
     let mut count = 0;
 
-    while true {
+    loop {
         match io::stdin().lock().read_exact(&mut buf) {
             Ok(_) => (),
             _ => {break;}

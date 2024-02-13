@@ -1,31 +1,23 @@
-
+#[allow(unused_imports)]
 #[macro_use]
 extern crate lazy_static;
 
+pub mod searchable;
+pub mod generator;
+pub mod fromgenerator;
 pub mod readit;
-pub mod searchit;
-pub mod grepit;
-pub mod matcher;
-pub mod groupby;
-pub mod hashmapit;
 
-mod testit;
 
 use std::mem;
-use memchr::memmem;
 
-use zerocopy::{big_endian::U32, FromBytes};
-use zerocopy_derive::{FromBytes, FromZeroes};
-
-pub trait TIterator<'a> {
-    fn new(bytes: &'a [u8], offset: usize) -> Self;
-}
+use zerocopy::{FromBytes};
 
 pub type WithOffset<T> = (usize, T);
 
 
 /// helper to read a zerocopy type T
-pub fn read_typed<'bytes, T>(bytes: &'bytes[u8]) -> Option<(usize, &T)>
+#[inline(always)]
+pub fn read_typed<T>(bytes: &[u8]) -> Option<(usize, &T)>
     where T : FromBytes
 {
     let read_bytes = mem::size_of::<T>();
@@ -52,41 +44,28 @@ impl<I,T> Iterator for NoOffsetIterator<I,T>
         where I: Iterator<Item=WithOffset<T>> {
     type Item = T;
 
+    #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
         let (_, next) = self.iter.next()?;
         Some(next)
     }
 }
 
+pub trait TIterator<'a> {
+    fn new(bytes: &'a [u8], offset: usize) -> Self;
+}
 
-pub trait TSearchable<'bytes>
-        where Self: Sized {
-
-    ///
-    ///
-    fn marker() -> &'static[u8];
-
-    ///
-    ///
+pub trait FromBytesReadableTrait<'bytes>
+where
+    Self: Sized
+{
     fn try_read(bytes: &'bytes [u8]) -> Option<(usize, Self)>;
-
     fn len(&self) -> usize;
 }
 
-pub fn search_marker<'bytes, T>(bytes: &'bytes[u8]) -> Option<usize>
-        where T: TSearchable<'bytes> {
-    let finder = memmem::Finder::new(T::marker());
-    finder.find(bytes)
-}
-
-pub fn search_last_marker<'bytes, T>(bytes: &'bytes[u8]) -> Option<usize>
-    where T: TSearchable<'bytes> {
-
-    let finder = memmem::FinderRev::new(T::marker());
-    finder.rfind(bytes)
-}
 
 /// helper to read a valid zerocopy type T
+#[inline(always)]
 pub fn read_valid_offset<T, R>(bytes: &[u8], mut isvalid: R) -> Option<(usize, &T)>
     where T : FromBytes, R: FnMut(&T) -> bool
 {
@@ -100,6 +79,7 @@ pub fn read_valid_offset<T, R>(bytes: &[u8], mut isvalid: R) -> Option<(usize, &
 
 
 /// helper to read a zerocopy type T
+#[inline(always)]
 pub fn read_typed_offset<T>(bytes: &[u8]) -> Option<(usize, &T)>
     where T : FromBytes
 {

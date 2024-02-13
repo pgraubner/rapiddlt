@@ -1,22 +1,6 @@
-/// readit
-///
-/// zerocopy provides FromBytes / IntoBytes traits to read fixed-sized data types without buffer copies.
-/// It does not support data types consisting of variable inner types and dynamic detection of endianess / data aligment.
-///
-/// For this purpose, the traits in this module allow a user to construct a wrapper type.
-/// A wrapper type is a struct that can consist of both fixed-sized inner types read with zerocopy
-/// complex types with variable size.
-///
+use std::marker::PhantomData;
 
-use std::{mem, marker::PhantomData};
-
-use memchr::memmem;
-
-use zerocopy::{big_endian::U32, FromBytes};
-use zerocopy_derive::{FromBytes, FromZeroes};
-
-use crate::{WithOffset, TSearchable, TIterator, search_marker, search_last_marker};
-
+use crate::{FromBytesReadableTrait, TIterator, WithOffset};
 
 ///
 /// ReadIterator
@@ -29,7 +13,8 @@ use crate::{WithOffset, TSearchable, TIterator, search_marker, search_last_marke
 ///
 /// Type T needs to implement the TWrapFromBytes trait.
 ///
-#[derive(Debug)]
+///
+/// #[derive(Debug)]
 pub struct ReadIterator<'bytes, T>
 {
     offset : usize,
@@ -44,7 +29,7 @@ impl<'bytes, T> ReadIterator<'bytes, T> {
 }
 
 impl<'bytes, T> TIterator<'bytes> for ReadIterator<'bytes, T>
-        where T: TSearchable<'bytes> {
+        where T: FromBytesReadableTrait<'bytes> {
     fn new(bytes: &'bytes [u8], offset: usize) -> Self {
         ReadIterator {offset, bytes, phantom: PhantomData,
         }
@@ -52,42 +37,22 @@ impl<'bytes, T> TIterator<'bytes> for ReadIterator<'bytes, T>
 }
 
 impl<'bytes, T> Iterator for ReadIterator<'bytes, T>
-    where T: TSearchable <'bytes>
+    where T: FromBytesReadableTrait <'bytes>
 {
     type Item = WithOffset<T>;
     fn next(&mut self) -> Option<WithOffset<T>> {
-        if self.offset + T::marker().len() >= self.bytes.len() {
+        if self.offset  >= self.bytes.len() {
             return None
         }
-        if &self.bytes[self.offset..self.offset+T::marker().len()] == T::marker() {
-            // a valid T at offset
-            match T::try_read(&self.bytes[self.offset..]) {
-                Some((bytes_read, val)) => {
-                    let _off = self.offset;
-                    self.offset += bytes_read;
-                    Some((_off, val))
-                },
-                None => {
-                    None
-                }
+        match T::try_read(&self.bytes[self.offset..]) {
+            Some((bytes_read, val)) => {
+                let _off = self.offset;
+                self.offset += bytes_read;
+                Some((_off, val))
+            },
+            None => {
+                None
             }
-        } else {
-                // no valid T at offset, searching for a marker
-                match search_marker::<T>(&self.bytes[self.offset..]) {
-                    Some(position) => {
-                        if position == 0 {
-                            // a match with offset = 0 indicates a slice starting with a valid marker
-                            // without containing a valid result
-                            None
-                        } else {
-                            self.offset = self.offset + position;
-                            self.next()
-                        }
-                    }
-                    None => {
-                        None
-                    },
-                }
         }
     }
 }

@@ -35,4 +35,30 @@ done
 cat 1_1gb_concat.dlt 1_1gb_concat.dlt 1_1gb_concat.dlt 1_1gb_concat.dlt  > 4_4gb_concat.dlt
 
 cd ..
+
+# 10 lifecycles with 100000 DLT messages each with random payload size=1b
+for i in {0..9}
+do
+    dd if=/dev/urandom bs=100 count=1000 | target/release/dd_dlt ecu$i app$i 1 >> test_gen/1b_random_ten_lcs.dlt
+done
+
+# 10 lifecycles with 100000 DLT messages each with random payload size=100b
+for i in {0..9}
+do
+    dd if=/dev/urandom bs=100 count=100000 | target/release/dd_dlt ecu$i app$i 100 >> test_gen/100b_random_ten_lcs.dlt
+done
+
+# 10 lifecycles with 10000 DLT messages each with "Hello World" payload size=11b
+for i in {0..9}
+do
+    seq 10000 | xargs -I{} echo -n "Hello World" | target/release/dd_dlt ecu$i app$i 11 >> test_gen/11b_hello_ten_lcs.dlt
+done
+
+# 100000 DLT messages with payload size=45b, embeds DLT messages in payload
+cat test_gen/11b_hello_ten_lcs.dlt | target/release/dd_dlt nas1 nas1 45 > test_gen/nasty.dlt
+
+# 50000 DLT messages with payload size=158b, embeds 2 DLT messages in a DLT message in payload
+cat test_gen/nasty.dlt | target/release/dd_dlt nas2 nas2 158 > test_gen/nasty_nasty.dlt
+
+
 du -h test*/*.dlt

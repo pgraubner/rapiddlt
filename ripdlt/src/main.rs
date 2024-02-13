@@ -1,6 +1,7 @@
 
 use rapiddlt::{dlt_v1::{DltStorageEntry, dltit}, dltbuffer::DltBuffer, DltGrepIterator};
-use matchit::{matcher::{TMatcherCall}, groupby::{GroupBy}, hashmapit::HasMapIteratorCall, TSearchable, };
+use matchit::{fromgenerator::FromAdaptFnCall, generator::generator::Generator, FromBytesReadableTrait };
+use matchit::generator::adapter::AdapterTrait;
 
 const MIN_TIME_DMS: u32 = 18000000; // Timestamp since system start in 0.1 milliseconds
 
@@ -42,100 +43,158 @@ fn count(mmap: &[u8]) -> usize {
 }
 
 fn count_hello_world(mmap: &[u8]) -> usize {
-    let finder = memmem::Finder::new("Hello world".as_bytes());
+    let finder = memmem::Finder::new("Hello World".as_bytes());
 
-    let mut it = dltit(mmap);
+    let it = dltit(mmap);
 
     let predicate = |a: &DltStorageEntry<'_>| finder.find_iter(a.dlt.payload().expect("needs to be a valid DLT")).next().is_some();
-    let result = it.by_ref()
+    let result = it
         .filter(predicate)
         .count();
     result
 }
 
 fn count_hello_world_raw(mmap: &[u8]) -> usize {
-    let finder = memmem::Finder::new("Hello world".as_bytes());
+    let finder = memmem::Finder::new("Hello World".as_bytes());
     finder.find_iter(mmap).count()
 }
 
 fn count_hello_world_grepit(mmap: &[u8]) -> usize {
-    let it = DltGrepIterator::new("H.* world", mmap, 0);
+    let it = DltGrepIterator::new("H.* World", mmap, 0);
     it.count()
 }
 
-fn lifecycle_histogram_sorted(mmap: DltBuffer) -> BTreeMap<usize, usize> {
-    let mut it = dltit(&mmap.as_slice());
-    let predicate = |a: DltStorageEntry<'_>, b: DltStorageEntry<'_>| b.dlt.timestamp() >= a.dlt.timestamp();
+// fn lifecycle_histogram_sorted(mmap: DltBuffer) -> BTreeMap<usize, usize> {
+//     let it = dltit(mmap.as_slice());
+//     let predicate = |a: &DltStorageEntry<'_>, b: &DltStorageEntry<'_>| b.dlt.timestamp() >= a.dlt.timestamp();
 
-    let mut result = it
-        .filter(|e| e.dlt.header.header_type.is_with_timestamp())
-        .matches(GroupBy::new(predicate))
-        .collect::<Vec<_>>();
-    result
-        .sort_by(|r0, r1| r0.0.dlt.timestamp().unwrap().partial_cmp(&r1.0.dlt.timestamp().unwrap()).unwrap() );
-    result.iter().by_ref()
-        .map(|r| r.1.dlt.timestamp().unwrap() - r.0.dlt.timestamp().unwrap())
-        .histogram(|id| *id as usize / 10000 ).collect()
-}
+//     let mut result = it
+//         .filter(|e| e.dlt.header.header_type.is_with_timestamp())
+//         .groupby(predicate)
+//         .collect::<Vec<_>>();
+//     result
+//         .sort_by(|r0, r1| r0.0.dlt.timestamp().unwrap().partial_cmp(&r1.0.dlt.timestamp().unwrap()).unwrap() );
+//     result.iter().by_ref()
+//         .map(|r| r.1.dlt.timestamp().unwrap() - r.0.dlt.timestamp().unwrap())
+//         .split(|id| *id as usize / 10000, |_| Generator::count() )
+// }
 
 fn continuous_timestamp_histogram(mmap: DltBuffer) -> BTreeMap<usize, usize> {
-    let mut it = dltit(&mmap.as_slice());
-    let predicate = |a: DltStorageEntry<'_>, b: DltStorageEntry<'_>| b.storage_header.secs.get() >= a.storage_header.secs.get();
+    let it = dltit(mmap.as_slice());
+    let predicate = |a: &DltStorageEntry<'_>, b: &DltStorageEntry<'_>| b.storage_header.secs.get() >= a.storage_header.secs.get();
 
-    let mut result = it.by_ref()
-        .matches(GroupBy::new(predicate))
+    let result = it
+        .groupby(predicate)
         .map(|r| r.1.storage_header.secs.get() - r.0.storage_header.secs.get())
     ;
-    result.histogram(|ts| *ts as usize ).collect()
+    result.split(|id| *id as usize , |_| Generator::count() )
 }
 
+fn lifecycle_splitit(mmap: DltBuffer) -> BTreeMap<[u8;4],  (BTreeMap<u32, usize>, usize)> {
+    let it = dltit(mmap.as_slice());
+
+    let predicate = |a: &DltStorageEntry<'_>, b: &DltStorageEntry<'_>| b.dlt.timestamp() >= a.dlt.timestamp();
+    let mapping = |r: &(DltStorageEntry<'_>,DltStorageEntry<'_>)| (r.1.dlt.timestamp().unwrap() - r.0.dlt.timestamp().unwrap()) / 10000;
+
+    let result = it
+        .filter(|e| e.dlt.header.header_type.is_with_timestamp())
+        .split(
+            |a: &DltStorageEntry<'_>| a.storage_header.ecu,
+            |_| Generator::fork(
+                Generator::groupby(predicate)
+                                        .map(mapping)
+                    .split(
+                        |k: &u32| *k,
+                        |_| Generator::count()
+                    ),
+                Generator::count()
+            )
+        );
+
+    result
+}
+
+fn timestamp_splitit(mmap: DltBuffer) -> BTreeMap<[u8; 4], (BTreeMap<u32, usize>, usize)> {
+    let it: matchit::NoOffsetIterator<matchit::searchable::readfallbackit::ReadFallbackIterator<'_, DltStorageEntry<'_>>, DltStorageEntry<'_>> = dltit(mmap.as_slice());
+
+    let predicate = |a: &DltStorageEntry<'_>, b: &DltStorageEntry<'_>| b.storage_header.secs.get() >= a.storage_header.secs.get();
+    let mapping = |r: &(DltStorageEntry<'_>,DltStorageEntry<'_>)| r.1.storage_header.secs.get() - r.0.storage_header.secs.get();
+
+    // let max = |a:DltStorageEntry<'_>,b:DltStorageEntry<'_>|
+    //  {if a.storage_header.secs.get() >= b.storage_header.secs.get() { return a }; b};
+    // let union = |a: &(DltStorageEntry<'_>, DltStorageEntry<'_>), b: &(DltStorageEntry<'_>, DltStorageEntry<'_>)| {
+    //     if b.0.storage_header.secs.get() >= a.0.storage_header.secs.get() && b.0.storage_header.secs.get() <= a.1.storage_header.secs.get() {
+    //         Some((a.0, max(a.1, b.1)))
+    //     } else if a.0.storage_header.secs.get() >= b.0.storage_header.secs.get() && a.0.storage_header.secs.get() <= b.1.storage_header.secs.get() {
+    //         Some((b.0, max(a.1, b.1)))
+    //     } else {
+    //         None
+    //     }
+    // };
+    // let keyfn = |r: &(DltStorageEntry<'_>,DltStorageEntry<'_>)| (r.0.storage_header.secs.get(), r.1.storage_header.secs.get());
+
+    let result = it
+        .split(
+            |a: &DltStorageEntry<'_>| a.storage_header.ecu,
+            |_| Generator::fork(
+                Generator::groupby(predicate)
+                    .map(mapping)
+                    .split(
+                        |k: &u32| *k,
+                        |_| Generator::count()
+                    ),
+                Generator::count()
+            )
+        );
+
+    result
+}
 
 fn lifecycle_histogram(mmap: DltBuffer) -> BTreeMap<usize, usize> {
-    let mut it = dltit(&mmap.as_slice());
-    let predicate = |a: DltStorageEntry<'_>, b: DltStorageEntry<'_>| a.dlt.ecu_id() == b.dlt.ecu_id() && b.dlt.timestamp() >= a.dlt.timestamp();
+    let it = dltit(mmap.as_slice());
+    let predicate = |a: &DltStorageEntry<'_>, b: &DltStorageEntry<'_>| a.dlt.ecu_id() == b.dlt.ecu_id() && b.dlt.timestamp() >= a.dlt.timestamp();
 
-    let result = it.by_ref()
+    let result = it
         .filter(|e| e.dlt.header.header_type.is_with_timestamp())
-        .matches(GroupBy::new(predicate))
+        .groupby(predicate)
         .map(|r| r.1.dlt.timestamp().unwrap() - r.0.dlt.timestamp().unwrap())
     ;
-    result.histogram(|id| *id as usize / 10000 ).collect()
+    result.split(|id| *id as usize / 10000, |_| Generator::count() )
 }
 
 fn histogram_payload(mmap: DltBuffer) -> BTreeMap<usize, usize> {
-    let mut it = dltit(&mmap.as_slice());
+    let it = dltit(mmap.as_slice());
 
-    let result = it.by_ref()
+    let result = it
         .map(|dlt| dlt.dlt.payload().unwrap_or(&[0u8;0]).len())
     ;
-    result.histogram(|id| *id as usize ).collect()
+    result.split(|id| *id, |_| Generator::count() )
 }
 
 fn histogram_message(mmap: DltBuffer) -> BTreeMap<usize, usize> {
-    let mut it = dltit(&mmap.as_slice());
+    let it = dltit(mmap.as_slice());
 
-    let result = it.by_ref()
+    let result = it
         .map(|dlt| dlt.len())
     ;
-    result.histogram(|id| *id as usize ).collect()
+    result.split(|id| *id, |_| Generator::count() )
 }
 
 
 const IDX_BUCKET_SIZE:usize = 100000000;
 fn histogram_hello_world(mmap: DltBuffer) -> BTreeMap<usize, usize> {
-    let it = DltGrepIterator::new("H.* world", mmap.as_slice(), 0);
+    let it = DltGrepIterator::new("H.* World", mmap.as_slice(), 0);
     it.map(|(offset, _)| offset)
-        .histogram(|offset| offset / IDX_BUCKET_SIZE )
-        .collect()
+        .split(|offset: &usize| offset / IDX_BUCKET_SIZE , |_| Generator::count())
 }
 
 fn lifecycle_iter(mmap: &[u8]) -> usize {
-    let mut it = dltit(mmap);
-    let predicate = |a: DltStorageEntry<'_>, b: DltStorageEntry<'_>| b.dlt.timestamp() >= a.dlt.timestamp();
+    let it = dltit(mmap);
+    let predicate = |a: &DltStorageEntry<'_>, b: &DltStorageEntry<'_>| b.dlt.timestamp() >= a.dlt.timestamp();
 
-    let result = it.by_ref()
+    let result = it
         .filter(|e| e.dlt.header.header_type.is_with_timestamp())
-        .matches(GroupBy::new(predicate))
+        .groupby(predicate)
         .filter(|r| r.1.dlt.timestamp().unwrap() - r.0.dlt.timestamp().unwrap() >= MIN_TIME_DMS)
     ;
     let r = result.count();
@@ -146,10 +205,10 @@ use itertools::Itertools;
 use memchr::memmem;
 
 fn lifecycle_itertools(mmap: &[u8]) -> usize {
-    let mut it = dltit(mmap);
+    let it = dltit(mmap);
     let predicate = |a: &DltStorageEntry<'_>, b: &DltStorageEntry<'_>| b.dlt.timestamp() >= a.dlt.timestamp();
 
-    let result = it.by_ref()
+    let result = it
         .filter(|e| e.dlt.header.header_type.is_with_timestamp())
         .tuple_windows()
         .filter( |(a,b) |(predicate)(a,b))
@@ -160,7 +219,7 @@ fn lifecycle_itertools(mmap: &[u8]) -> usize {
     r
 }
 
-use std::{env, collections::{BTreeMap}, mem};
+use std::{env, collections::{BTreeMap}};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -185,6 +244,18 @@ fn main() {
             println!("Distribution of lifecycle durations:");
             for (k,v) in lifecycle_histogram(mmap) {
                 println!("{:?}-{:?} secs: {:?}", k, k+1, v);
+            }
+        },
+        "split_lifecycles" =>{
+            println!("Distribution of lifecycle durations:");
+            for (k,v) in lifecycle_splitit(mmap) {
+                println!("{} #lifecycles: {:?}", String::from_utf8(k.to_vec()).unwrap(), v);
+            }
+        },
+        "split_timestamp" =>{
+            println!("Durations of periods where DLT storage header timestamps are continuous:");
+            for (k,v) in timestamp_splitit(mmap) {
+                println!("{} #lifecycles: {:?}", String::from_utf8(k.to_vec()).unwrap(), v);
             }
         },
         "histogram_timestamp" =>{
@@ -231,7 +302,7 @@ fn main() {
         }
         "count_hello_world_raw" => {
             let r = count_hello_world_raw(mmap.as_slice());
-            println!("{:?} hello world messages", r);
+            println!("{:?} raw hello world matches", r);
         }
         "count_hello_world_grepit" => {
             let r = count_hello_world_grepit(mmap.as_slice());

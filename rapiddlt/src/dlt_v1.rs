@@ -1,13 +1,16 @@
 
-use matchit::{NoOffsetIterator, TSearchable, searchit::{SearchIterator, RevSearchIterator,}, readit::{ReadIterator}, read_typed_offset, read_valid_offset, TIterator};
+use matchit::searchable::SearchableMarkerTrait;
+use matchit::{read_typed_offset, FromBytesReadableTrait, NoOffsetIterator};
 use zerocopy_derive::{AsBytes, FromBytes, FromZeroes};
-use zerocopy::{byteorder::big_endian::*, little_endian, AsBytes, LittleEndian};
+use zerocopy::{byteorder::big_endian::*, little_endian};
 
 #[derive(AsBytes,FromBytes,FromZeroes,Debug)]
 #[repr(C)]
 pub struct DltHTyp {
     htyp: u8
 }
+
+#[allow(dead_code)]
 impl DltHTyp {
     pub fn new(
         is_extended_header: bool,
@@ -40,39 +43,40 @@ impl DltHTyp {
 
     #[inline(always)]
     fn is_extended_header(&self) -> bool {
-        (self.htyp & DltHTypMask::UEH as u8) > 0
+        (self.htyp & DltHTypMask::UseExtendedHeader as u8) > 0
     }
     #[inline(always)]
     fn is_msb_first(&self) -> bool {
-        (self.htyp & DltHTypMask::MSBF as u8) > 0
+        (self.htyp & DltHTypMask::MostSignificantByteFirst as u8) > 0
     }
     #[inline(always)]
     fn is_with_ecu_id(&self) -> bool {
-        (self.htyp & DltHTypMask::WEID as u8) > 0
+        (self.htyp & DltHTypMask::WithEcuId as u8) > 0
     }
     #[inline(always)]
     fn is_with_session_id(&self) -> bool {
-        (self.htyp & DltHTypMask::WSID as u8) > 0
+        (self.htyp & DltHTypMask::WithSessionId as u8) > 0
     }
     #[inline(always)]pub
     fn is_with_timestamp(&self) -> bool {
-        (self.htyp & DltHTypMask::WTMS as u8) > 0
+        (self.htyp & DltHTypMask::WithTimestamp as u8) > 0
     }
     #[inline(always)]
     fn version(&self) -> u8 {
-        (self.htyp & DltHTypMask::VERS as u8) >> 5
+        (self.htyp & DltHTypMask::Version as u8) >> 5
     }
 }
 
+#[allow(dead_code)]
 #[derive(AsBytes)]
 #[repr(u8)]
 enum DltHTypMask {
-    UEH  = 0x01, // Use Extended Header, UEH
-    MSBF = 0x02,
-    WEID = 0x04,
-    WSID = 0x08,
-    WTMS = 0x10,
-    VERS = 0xe0,
+    UseExtendedHeader  = 0x01, // Use Extended Header, UEH
+    MostSignificantByteFirst = 0x02,
+    WithEcuId = 0x04,
+    WithSessionId = 0x08,
+    WithTimestamp = 0x10,
+    Version = 0xe0,
 }
 
 #[derive(AsBytes,FromBytes,FromZeroes,Debug)]
@@ -150,28 +154,53 @@ use std::mem;
 use crate::DltIterator;
 
 #[derive(Debug, Clone, Copy)]
+
 pub struct DltStorageEntry<'bytes> {
     pub storage_header: &'bytes DltStorageHeader,
     pub dlt: DltEntry<'bytes>
 }
 
-impl<'bytes> TSearchable<'bytes> for DltStorageEntry<'bytes> {
-    #[inline(always)]
-    fn try_read(bytes: &'bytes [u8]) -> Option<(usize, Self)> {
-        // Each DltStorageHeader starts with a valid pattern
-        let (size1, sh) = read_typed_offset::<DltStorageHeader>(bytes)?;
-        if size1 > bytes.len() {
-            return None
-        }
-        let (size2, entry) = DltEntry::try_read(&bytes[size1..])?;
-        Some((size1+size2, DltStorageEntry {storage_header: sh, dlt: entry}))
+#[inline(always)]
+fn try_read(bytes: &[u8]) -> Option<(usize, DltStorageEntry)> {
+    let (size1, sh) = read_typed_offset::<DltStorageHeader>(bytes)?;
+    if (size1) > bytes.len() {
+        return None
     }
+    let (size2, entry) = DltEntry::try_read(&bytes[size1..])?;
+    Some((size1+size2, DltStorageEntry {storage_header: sh, dlt: entry}))
+}
 
+impl<'bytes> SearchableMarkerTrait<'bytes> for DltStorageEntry<'bytes> {
     #[inline(always)]
     fn marker() -> &'static[u8] {
         &[b'D',b'L',b'T', 0x1]
     }
 
+    #[inline(always)]
+    fn try_read_valid_marker(bytes: &'bytes [u8]) -> Option<(usize, Self)> {
+        try_read(bytes)
+    }
+
+    #[inline(always)]
+    fn len(&self) -> usize {
+        self.dlt.header.length() + mem::size_of::<DltStorageHeader>()
+    }
+}
+
+impl<'bytes> FromBytesReadableTrait<'bytes> for DltStorageEntry<'bytes> {
+
+    #[inline(always)]
+    fn try_read(bytes: &'bytes [u8]) -> Option<(usize, Self)> {
+        if bytes.len() < 4 {
+            return None
+        }
+        if bytes[0..4] != [b'D',b'L',b'T', 0x1] {
+            return None
+        }
+        try_read(bytes)
+    }
+
+    #[inline(always)]
     fn len(&self) -> usize {
         self.dlt.header.length() + mem::size_of::<DltStorageHeader>()
     }
@@ -211,6 +240,7 @@ impl<'bytes> DltEntry<'bytes> {
             None
         }
     }
+
     #[inline(always)]
     pub fn payload(&self) -> Option<&[u8]> {
         let mut offset = 0usize;
@@ -235,7 +265,7 @@ impl<'bytes> DltEntry<'bytes> {
 
 }
 
-impl<'bytes> TSearchable<'bytes> for DltEntry<'bytes> {
+impl<'bytes> FromBytesReadableTrait<'bytes> for DltEntry<'bytes> {
     #[inline(always)]
     fn try_read(bytes: &'bytes [u8]) -> Option<(usize, Self)> {
         let (size1, h) = read_typed_offset::<DltStandardHeader>(bytes)?;
@@ -251,10 +281,7 @@ impl<'bytes> TSearchable<'bytes> for DltEntry<'bytes> {
         Some((size2, DltEntry {header: h, tail: p}))
     }
 
-    fn marker() -> &'static[u8] {
-        todo!()
-    }
-
+    #[inline(always)]
     fn len(&self) -> usize {
         self.header.length()
     }
@@ -262,17 +289,17 @@ impl<'bytes> TSearchable<'bytes> for DltEntry<'bytes> {
 
 
 /// helper to create an iterator for the wrapper type T
-pub fn dltit_offset<'bytes>( b: &'bytes [u8] ) -> DltIterator<'bytes, DltStorageEntry> {
+pub fn dltit_offset(b: &[u8] ) -> DltIterator< DltStorageEntry> {
     DltIterator::new(b, 0)
 }
 
-pub fn dltit<'bytes>( b: &'bytes [u8] ) -> NoOffsetIterator<DltIterator<'bytes, DltStorageEntry>, DltStorageEntry> {
+pub fn dltit(b: &[u8] ) -> NoOffsetIterator<DltIterator< DltStorageEntry>, DltStorageEntry> {
     NoOffsetIterator::new(DltIterator::new(b, 0))
 }
 
 #[cfg(test)]
 mod tests {
-    use matchit::grepit::GrepIterator;
+    use matchit::searchable::grepit::GrepIterator;
     use zerocopy::AsBytes;
 
     use crate::dltbuffer::DltBuffer;
@@ -436,8 +463,6 @@ mod tests {
     }
 
     use crate::{ dlt_v1::{dltit, DltStorageEntry}};
-
-    use super::*;
 
     #[test]
     fn grepit_large() {
