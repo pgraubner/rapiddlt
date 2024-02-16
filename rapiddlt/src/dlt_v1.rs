@@ -132,18 +132,107 @@ struct DltStandardHeaderExtra {
     pub tmsp: U32               // < Timestamp since system start in 0.1 milliseconds
 }
 
+#[allow(dead_code)]
+enum MessageInfoMask {
+    Verbose = 0x1,
+    MessageType = 0x7 << 1,
+    MessageTypeInfo = 0x15 << 4,
+}
+
+#[allow(dead_code)]
+pub enum MessageType {
+    DltTypeLog = 0x0, // Dlt Log Message
+    DltTypeAppTrace = 0x1, // Dlt Trace Message
+    DltTypeNwTrace = 0x2, // Dlt Network Message
+    DltTypeControl = 0x3, // Dlt Control Messag
+}
+
+#[allow(dead_code)]
+pub enum DltLogMessageTypeInfo {
+    DltLogFatal = 0x1,     // Fatal system error
+    DltLogDltError = 0x2,   // Application error
+    DltLogWarn = 0x3,        // Correct behavior cannot be ensured
+    DltLogInfo = 0x4,         // Message of LogLevel type 'Information'
+    DltLogDebug = 0x5,       // Message of LogLevel type 'Debug'
+    DltLogVerbose = 0x6,     // Message of LogLevel type 'Verbose'
+}
+
+#[allow(dead_code)]
+pub enum DltTraceMessageTypeInfo {
+    DltTraceVariable = 0x1,        // Value of variable
+    DltTraceFunctionIn = 0x2,         // Call of a function
+    DltTraceFunctionOut = 0x3,        // Return of a function
+    DltTraceState = 0x4,       // State of a State Machine
+    DltTraceVfb = 0x5,         // RTE events
+}
+#[allow(dead_code)]
+pub enum DltNetworkMessageTypeInfo {
+    DltNwTraceIpc = 0x1,      // Inter-Process-Communication
+    DltNwTraceCan = 0x2,      // CAN Communications bus
+    DltNwTraceFlexray = 0x3,      // FlexRay Communications bus
+    DltNwTraceMost = 0x4,         // Most Communications bus
+    DltNwTraceEthernet = 0x5,         // Ethernet Communications bus
+    DltNwTraceSomeip = 0x6,       // Inter-SOME/IP Communication
+}
+#[allow(dead_code)]
+pub enum DltControlMessageTypeInfo {
+    DltControlRequest = 0x1,       // Request Control Message
+    DltControlResponse = 0x2,      // Respond Control Message
+}
+
+#[derive(AsBytes,FromBytes,FromZeroes,Debug)]
+#[repr(C)]
+pub struct DltMsinType {
+    msin: u8
+}
+
+impl DltMsinType {
+    pub fn log_message(verbose: bool) -> Self {
+        let mut msin: u8 = 0;
+        if verbose {
+            msin = 0x1;
+        }
+        Self { msin}
+    }
+
+    pub fn trace_message(verbose: bool) -> Self {
+        let mut msin: u8 = 0;
+        if verbose {
+            msin = 0x1;
+        }
+        Self { msin }
+    }
+
+    pub fn network_message(verbose: bool) -> Self {
+        let mut msin: u8 = 0;
+        if verbose {
+            msin = 0x1;
+        }
+        Self { msin }
+    }
+
+    pub fn control_message(verbose: bool) -> Self {
+        let mut msin: u8 = 0;
+        if verbose {
+            msin = 0x1;
+        }
+        Self { msin }
+    }
+
+}
+
 
 #[derive(AsBytes,FromBytes,FromZeroes,Debug)]
 #[repr(C)]
 pub struct DltExtendedHeader {
-    msin: u8,         // < messsage info
+    msin: DltMsinType,         // < messsage info
     noar: u8,         // < number of arguments
     apid: [u8; 4],    // < application id
     ctid: [u8; 4],    // < context id
 }
 
 impl DltExtendedHeader {
-    pub fn new(msin: u8, noar: u8, apid: [u8; 4], ctid: [u8; 4]) -> Self {
+    pub fn new(msin: DltMsinType, noar: u8, apid: [u8; 4], ctid: [u8; 4]) -> Self {
         Self { msin, noar, apid, ctid }
     }
 }

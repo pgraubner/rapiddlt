@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Added
 - test: valid verbose DLT files
+- rapiddlt::dlt_v1: Extended Header Message Info support
 
 ### Changed
 - matchit::generator::merge: changed from reducer to adapter implementation
