@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, ops::Add};
+use std::{marker::PhantomData, ops::{Add, ControlFlow}};
 
 use super::{groupby::{GroupBy, Merge}, reducer::*};
 
@@ -18,8 +18,8 @@ pub trait AdaptFnTrait {
     type Input;
     type Output;
 
-    fn adapt(&mut self, next: Self::Input) -> Option<Self::Output>;
-    fn finalize(&mut self) -> Option<Self::Output>;
+    fn adapt(&mut self, next: Self::Input) -> ControlFlow<(), Option<Self::Output>>;
+    fn finalize(&mut self) -> ControlFlow<(), Option<Self::Output>>;
 }
 
 pub trait AdapterTrait
@@ -29,8 +29,8 @@ where
     type Input;
     type Output;
 
-    fn adapt(&mut self, next: Self::Input) -> Option<Self::Output>;
-    fn finalize(&mut self) -> Option<Self::Output>;
+    fn adapt(&mut self, next: Self::Input) -> ControlFlow<(), Option<Self::Output>>;
+    fn finalize(&mut self) -> ControlFlow<(), Option<Self::Output>>;
 
     #[inline(always)]
     fn split<RedFn,KeyFn,R,Key,Red>(self, keyfn: KeyFn, reducerfn: RedFn) -> Reducer<Split<RedFn,KeyFn,Self::Output,R,Key,Red>, Self>
@@ -87,14 +87,14 @@ where
 
 
     #[inline(always)]
-    fn merge<F,KeyFn,Key>(self,f: F, keyfn: KeyFn) -> Reducer<Merge<Self::Output,F,KeyFn,Key>, Self>
+    fn merge<F,KeyFn,Key>(self,f: F, keyfn: KeyFn) -> Adapter<Merge<Self::Output,F,KeyFn,Key>, Self>
     where
         KeyFn: Fn(&Self::Output) -> Key,
         F: Fn(&Self::Output, &Self::Output) -> Option<Self::Output>,
         Self::Output: Clone,
         Key: Ord
     {
-        Reducer::new( Merge::new(f, keyfn), self )
+        Adapter::new( Merge::new(f, keyfn), self )
     }
 
 }
@@ -117,13 +117,13 @@ impl<I> AdapterTrait for NilAdapter<I> {
     type Output = I;
 
     #[inline(always)]
-    fn adapt(&mut self, next: Self::Input) -> Option<Self::Output> {
-        Some(next)
+    fn adapt(&mut self, next: Self::Input) -> ControlFlow<(), Option<Self::Output>> {
+        ControlFlow::Continue(Some(next))
     }
 
     #[inline(always)]
-    fn finalize(&mut self) -> Option<Self::Output> {
-        None
+    fn finalize(&mut self) -> ControlFlow<(), Option<Self::Output>> {
+        ControlFlow::Break(())
     }
 }
 
@@ -165,27 +165,32 @@ where
 impl<Impl, A> AdapterTrait for Adapter<Impl, A>
 where
     A: AdapterTrait,
-    Impl: AdaptFnTrait<Input = A::Output>
+    Impl: AdaptFnTrait<Input = A::Output>,
 {
     type Input = A::Input;
     type Output = Impl::Output;
 
     #[inline(always)]
-    fn adapt(&mut self, next: Self::Input) -> Option<Self::Output> {
+    fn adapt(&mut self, next: Self::Input) -> ControlFlow<(), Option<Self::Output>> {
         let out = self.1.adapt(next)?;
-        self.0.adapt(out)
-    }
 
-    #[inline(always)]
-    fn finalize(&mut self) -> Option<Self::Output> {
-        let out = self.1.finalize();
-        let result = self.0.finalize();
         if let Some(o) = out {
             self.0.adapt(o)
         } else {
-            result
+            ControlFlow::Continue(None)
         }
+    }
 
+    #[inline(always)]
+    fn finalize(&mut self) -> ControlFlow<(), Option<Self::Output>> {
+        let mut out = self.1.finalize();
+        while out.is_continue() {
+            if let ControlFlow::Continue(Some(o)) = out {
+                return self.0.adapt(o);
+            }
+            out = self.1.finalize();
+        }
+        self.0.finalize()
     }
 }
 
@@ -204,17 +209,17 @@ where
     type Output = Input;
 
     #[inline(always)]
-    fn adapt(&mut self, next: Self::Input) -> Option<Self::Output> {
+    fn adapt(&mut self, next: Self::Input) -> ControlFlow<(), Option<Self::Output>> {
         if (self.0)(&next) {
-            Some(next)
+            ControlFlow::Continue(Some(next))
         } else {
-            None
+            ControlFlow::Continue(None)
         }
     }
 
     #[inline(always)]
-    fn finalize(&mut self) -> Option<Self::Output> {
-        None
+    fn finalize(&mut self) -> ControlFlow<(), Option<Self::Output>> {
+        ControlFlow::Break(())
     }
 }
 
@@ -232,12 +237,12 @@ where
     type Output = Output;
 
     #[inline(always)]
-    fn adapt(&mut self, next: Self::Input) -> Option<Self::Output> {
-        Some((self.0)(&next))
+    fn adapt(&mut self, next: Self::Input) -> ControlFlow<(), Option<Self::Output>> {
+        ControlFlow::Continue(Some((self.0)(&next)))
     }
 
     #[inline(always)]
-    fn finalize(&mut self) -> Option<Self::Output> {
-        None
+    fn finalize(&mut self) -> ControlFlow<(), Option<Self::Output>> {
+        ControlFlow::Break(())
     }
 }

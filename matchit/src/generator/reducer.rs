@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::ops::ControlFlow;
 use std::{marker::PhantomData};
 
 use super::adapter::{AdapterTrait};
@@ -22,7 +23,7 @@ impl<Impl, A> ReducerTrait for Reducer<Impl,A>
 where
     Impl: ReducerTrait<Input = A::Output>,
     A: AdapterTrait,
-{
+    {
     type Input = A::Input;
     type Reduced = Impl::Reduced;
 
@@ -30,17 +31,21 @@ where
     fn next(&mut self, next: Self::Input)
     {
         let out = self.1.adapt(next);
-        if let Some(o) = out {
+        if let ControlFlow::Continue(Some(o)) = out {
             self.0.next(o)
         }
     }
 
     #[inline(always)]
     fn finalize(mut self) -> Self::Reduced {
-        let out = self.1.finalize();
-        if let Some(o) = out {
-            self.0.next(o)
+        let mut out = self.1.finalize();
+        while out.is_continue() {
+            if let ControlFlow::Continue(Some(o)) = out {
+                self.0.next(o);
+            }
+            out = self.1.finalize();
         }
+
         self.0.finalize()
     }
 }

@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, ops::ControlFlow};
 
 use crate::generator::{adapter::AdaptFnTrait, groupby::GroupBy, reducer::{ReducerTrait, Split}};
 
@@ -18,17 +18,23 @@ where
     type Item = AdaptFn::Output;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if !self.2 {
-            return None
-        }
         for i in self.1.by_ref() {
             let result = self.0.adapt(i);
-            if result.is_some() {
-                return result;
+            if let ControlFlow::Continue(Some(res)) = result {
+                return Some(res);
+            } else if let ControlFlow::Break(()) = result {
+                break;
             }
         }
-        self.2 = false;
-        self.0.finalize()
+
+        let mut out = self.0.finalize();
+        while out.is_continue() {
+            if let ControlFlow::Continue(Some(o)) = out {
+                return Some(o);
+            }
+            out = self.0.finalize();
+        }
+        None
     }
 }
 

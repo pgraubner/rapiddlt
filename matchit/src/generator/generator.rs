@@ -78,14 +78,14 @@ impl<Input> Generator<Input> {
     }
 
     #[inline(always)]
-    pub fn merge<F,KeyFn,Key>(f: F, keyfn: KeyFn) -> Reducer<Merge<Input,F,KeyFn,Key>, NilAdapter<Input>>
+    pub fn merge<F,KeyFn,Key>(f: F, keyfn: KeyFn) -> Adapter<Merge<Input,F,KeyFn,Key>, NilAdapter<Input>>
     where
         KeyFn: Fn(&Input) -> Key,
         F: Fn(&Input, &Input) -> Option<Input>,
         Input: Clone,
         Key: Ord
     {
-        Reducer::new( Merge::new(f, keyfn), NilAdapter::new() )
+        Adapter::new( Merge::new(f, keyfn), NilAdapter::new() )
     }
 }
 

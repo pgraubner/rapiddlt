@@ -114,31 +114,36 @@ fn lifecycle_splitit(mmap: DltBuffer) -> BTreeMap<[u8;4],  (BTreeMap<u32, usize>
     result
 }
 
-fn timestamp_splitit(mmap: DltBuffer) -> BTreeMap<[u8; 4], (BTreeMap<u32, usize>, usize)> {
+#[inline(always)]
+fn merge_overlapping_timestamps<'a>(a: &(DltStorageEntry<'a>, DltStorageEntry<'a>), b: &(DltStorageEntry<'a>, DltStorageEntry<'a>)) -> Option<(DltStorageEntry<'a>, DltStorageEntry<'a>)>
+{
+    let max = |a:DltStorageEntry<'a>,b:DltStorageEntry<'a>|
+     {if a.storage_header.secs.get() >= b.storage_header.secs.get() { return a }; b};
+
+    if b.0.storage_header.secs.get() >= a.0.storage_header.secs.get() && b.0.storage_header.secs.get() <= a.1.storage_header.secs.get() {
+        Some((a.0, max(a.1, b.1)))
+    } else if a.0.storage_header.secs.get() >= b.0.storage_header.secs.get() && a.0.storage_header.secs.get() <= b.1.storage_header.secs.get() {
+        Some((b.0, max(a.1, b.1)))
+    } else {
+        None
+    }
+}
+
+fn timestamp_splitit(mmap: DltBuffer) -> BTreeMap<[u8; 4], (BTreeMap<u32, usize>, usize)> { // BTreeMap<[u8; 4], (usize, usize)>
     let it: matchit::NoOffsetIterator<matchit::searchable::readfallbackit::ReadFallbackIterator<'_, DltStorageEntry<'_>>, DltStorageEntry<'_>> = dltit(mmap.as_slice());
 
     let predicate = |a: &DltStorageEntry<'_>, b: &DltStorageEntry<'_>| b.storage_header.secs.get() >= a.storage_header.secs.get();
-    let mapping = |r: &(DltStorageEntry<'_>,DltStorageEntry<'_>)| r.1.storage_header.secs.get() - r.0.storage_header.secs.get();
+    let time_delta = |r: &(DltStorageEntry<'_>,DltStorageEntry<'_>)| r.1.storage_header.secs.get() - r.0.storage_header.secs.get();
 
-    // let max = |a:DltStorageEntry<'_>,b:DltStorageEntry<'_>|
-    //  {if a.storage_header.secs.get() >= b.storage_header.secs.get() { return a }; b};
-    // let union = |a: &(DltStorageEntry<'_>, DltStorageEntry<'_>), b: &(DltStorageEntry<'_>, DltStorageEntry<'_>)| {
-    //     if b.0.storage_header.secs.get() >= a.0.storage_header.secs.get() && b.0.storage_header.secs.get() <= a.1.storage_header.secs.get() {
-    //         Some((a.0, max(a.1, b.1)))
-    //     } else if a.0.storage_header.secs.get() >= b.0.storage_header.secs.get() && a.0.storage_header.secs.get() <= b.1.storage_header.secs.get() {
-    //         Some((b.0, max(a.1, b.1)))
-    //     } else {
-    //         None
-    //     }
-    // };
-    // let keyfn = |r: &(DltStorageEntry<'_>,DltStorageEntry<'_>)| (r.0.storage_header.secs.get(), r.1.storage_header.secs.get());
+    let keyfn = |r: &(DltStorageEntry<'_>,DltStorageEntry<'_>)| (r.0.storage_header.secs.get(), r.1.storage_header.secs.get());
 
     let result = it
         .split(
             |a: &DltStorageEntry<'_>| a.storage_header.ecu,
             |_| Generator::fork(
                 Generator::groupby(predicate)
-                    .map(mapping)
+                    .merge(merge_overlapping_timestamps, keyfn )
+                    .map(time_delta)
                     .split(
                         |k: &u32| *k,
                         |_| Generator::count()

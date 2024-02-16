@@ -128,6 +128,31 @@ mod tests {
     }
 
     #[test]
+    fn groupby_adapter() {
+        let map = Generator::map(|next: &u32| *next * 2 );
+        let groupby = map.groupby(|a: &u32, b: &u32| b >= a);
+        let mut fold = groupby.fold(0u32, |acc: u32, _: (u32, u32)| acc+1);
+
+        for a in [0,1,2,0,0,2,3,0,4,3] {
+            fold.next(a);
+        }
+        assert_eq!(4, fold.finalize() as u32);
+    }
+
+    #[test]
+    fn groupby_collect() {
+        let predicate = |a: &usize, b: &usize| b >= a;
+        let mapping = |r: &(usize,usize)| r.1 - r.0;
+
+        let mut groupby = Generator::groupby(predicate).map(mapping).collect();
+
+        for a in [0,1,2,0,0,2,3,0,4,3,4,4] {
+            groupby.next(a);
+        }
+        println!("{:?}", groupby.finalize());
+    }
+
+    #[test]
     fn merge_generator() {
         let max = |a,b| {if a >= b { return a }; b};
         let union = |a: &(i32, i32), b: &(i32, i32)| {
@@ -141,7 +166,7 @@ mod tests {
         };
 
         let mut merge =
-            Generator::merge(union, |v: &(i32,i32)| *v);
+            Generator::merge(union, |v: &(i32,i32)| *v).collect();
 
         for a in [(0,1),(1,1),(2,3),(0,0),(0,0),(2,2),(3,4),(0,0),(4,5),(3,6)] {
             merge.next(a);
@@ -165,7 +190,7 @@ mod tests {
 
         let map = Generator::map(|a: &(i32, i32)| (a.0+1, a.1+1));
         let mut merge =
-            map.merge(union, |v: &(i32,i32)| *v);
+            map.merge(union, |v: &(i32,i32)| *v).collect();
 
         for a in [(0,1),(1,1),(2,3),(0,0),(0,0),(2,2),(3,4),(0,0),(4,5),(3,6)] {
             merge.next(a);
@@ -175,26 +200,20 @@ mod tests {
     }
 
     #[test]
-    fn groupby_adapter() {
-        let map = Generator::map(|next: &u32| *next * 2 );
-        let groupby = map.groupby(|a: &u32, b: &u32| b >= a);
-        let mut fold = groupby.fold(0u32, |acc: u32, _: (u32, u32)| acc+1);
-
-        for a in [0,1,2,0,0,2,3,0,4,3] {
-            fold.next(a);
-        }
-        assert_eq!(4, fold.finalize() as u32);
-    }
-
-    #[test]
     fn split_generator() {
         let mut split = Generator::split(|a: &usize| *a, |_| Generator::sum());
 
         for a in [0,1,2,0,0,2,3,0,4,3,4,4] {
             split.next(a);
         }
-        println!("{:?}", split.finalize());
-        //assert_eq!(4, fold.finalize() as u32);
+
+        let mut fin = split.finalize();
+        println!("{:?}", fin);
+        assert_eq!(0usize, *fin.entry(0).or_default() );
+        assert_eq!(1usize, *fin.entry(1).or_default() );
+        assert_eq!(4usize, *fin.entry(2).or_default() );
+        assert_eq!(6usize, *fin.entry(3).or_default() );
+        assert_eq!(12usize, *fin.entry(4).or_default() );
     }
 
     #[test]
@@ -205,8 +224,14 @@ mod tests {
         for a in [0,1,2,0,0,2,3,0,4,3,4,4] {
             split.next(a);
         }
-        println!("{:?}", split.finalize());
-        //assert_eq!(4, fold.finalize() as u32);
+
+        let mut fin = split.finalize();
+        println!("{:?}", fin);
+        assert_eq!(1usize, *fin.entry(0).or_default() );
+        assert_eq!(1usize, *fin.entry(2).or_default() );
+        assert_eq!(1usize, *fin.entry(4).or_default() );
+        assert_eq!(1usize, *fin.entry(6).or_default() );
+        assert_eq!(1usize, *fin.entry(8).or_default() );
     }
 
     #[test]

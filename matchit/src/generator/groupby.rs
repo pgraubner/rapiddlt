@@ -1,6 +1,6 @@
-use std::collections::{BTreeMap};
+use std::{collections::BTreeMap, ops::ControlFlow};
 
-use super::{adapter::AdaptFnTrait, reducer::ReducerTrait};
+use super::adapter::{AdaptFnTrait};
 
 #[derive(Clone)]
 pub enum GroupByState<T>
@@ -33,57 +33,59 @@ where
     type Output = (Input, Input);
 
     #[inline(always)]
-    fn adapt(&mut self, next: Self::Input) -> Option<Self::Output> {
+    fn adapt(&mut self, next: Self::Input) -> ControlFlow<(), Option<Self::Output>> {
         match self.1.clone() {
             GroupByState::Empty => {
                 self.1 = GroupByState::Consumed(next);
-                None
+                ControlFlow::Continue(None)
             },
             GroupByState::Consumed(ref prev) => {
                 if (self.0)(prev, &next) {
                     self.1 = GroupByState::Lazy((prev.clone(), next));
-                    None
+                    ControlFlow::Continue(None)
                 } else if (self.0)(prev, prev) {
                     self.1 = GroupByState::Consumed(next);
-                    Some((prev.clone(), prev.clone()))
+                    ControlFlow::Continue(Some((prev.clone(), prev.clone())))
                 } else {
-                    None
+                    ControlFlow::Continue(None)
                 }
             },
             GroupByState::Lazy((ref start, ref stop)) => {
                 if (self.0)(stop, &next) {
                     self.1 = GroupByState::Lazy((start.clone(), next));
-                    None
+                    ControlFlow::Continue(None)
                 } else {
                     self.1 = GroupByState::Consumed(next);
-                    Some((start.clone(),stop.clone()))
+                    ControlFlow::Continue(Some((start.clone(),stop.clone())))
                 }
             },
         }
     }
 
     #[inline(always)]
-    fn finalize(&mut self) -> Option<Self::Output> {
-        match self.1 {
+    fn finalize(&mut self) -> ControlFlow<(), Option<Self::Output>> {
+        match self.1.clone() {
             GroupByState::Empty => {
-                None
+                ControlFlow::Break(())
             },
             GroupByState::Consumed(ref prev) => {
+                self.1 = GroupByState::Empty;
                 if (self.0)(prev, prev) {
-                    Some((prev.clone(), prev.clone()))
+                    ControlFlow::Continue(Some((prev.clone(), prev.clone())))
                 } else {
-                    None
+                    ControlFlow::Break(())
                 }
             },
             GroupByState::Lazy((ref start, ref stop)) => {
-                Some((start.clone(),stop.clone()))
+                self.1 = GroupByState::Empty;
+                ControlFlow::Continue(Some((start.clone(),stop.clone())))
             },
         }
     }
 }
 
 
-pub struct Merge<Input,F,KeyFn,Key>(F, KeyFn, BTreeMap<Key,Input>)
+pub struct Merge<Input,F,KeyFn,Key>(F, KeyFn, BTreeMap<Key,Input>, Option<AdapterIterator<<BTreeMap<Key, Input> as IntoIterator>::IntoIter>>)
 where
     Input: Clone;
 impl <Input,F,KeyFn,Key> Merge<Input,F,KeyFn,Key>
@@ -91,22 +93,38 @@ where
     Input: Clone
 {
     pub fn new(f: F, keyfn: KeyFn) -> Self {
-        Self (f, keyfn, BTreeMap::new())
+        Self (f, keyfn, BTreeMap::new(), None)
     }
 }
 
-impl<Input,F,KeyFn,Key> ReducerTrait for Merge<Input,F,KeyFn,Key>
+struct AdapterIterator<It>(It);
+
+impl<Input,F,KeyFn,Key> AdaptFnTrait for Merge<Input,F,KeyFn,Key>
 where
     KeyFn: Fn(&Input) -> Key,
     F: Fn(&Input, &Input) -> Option<Input>,
     Input: Clone,
-    Key: Ord
+    Key: Ord + Clone
 {
     type Input = Input;
-    type Reduced = BTreeMap<Key,Input>;
+    type Output = Input;
 
     #[inline(always)]
-    fn next(&mut self, next: Self::Input) {
+    fn finalize(&mut self) -> ControlFlow<(), Option<Self::Output>> {
+        if self.3.is_none() {
+            self.3 = Some(AdapterIterator(self.2.clone().into_iter()));
+        }
+        if let Some(ref mut iter) = self.3 {
+            for (_,v) in iter.0.by_ref() {
+                return ControlFlow::Continue(Some(v))
+            }
+        }
+        ControlFlow::Break(())
+    }
+
+
+    #[inline(always)]
+    fn adapt(&mut self, next: Self::Input) -> ControlFlow<(), Option<Self::Output>> {
         let mut consumed = None;
 
         for (_, prev) in self.2.iter() {
@@ -122,10 +140,6 @@ where
         } else {
             self.2.insert((self.1)(&next), next);
         }
-    }
-
-    #[inline(always)]
-    fn finalize(self) -> Self::Reduced {
-        self.2
+        ControlFlow::Continue(None)
     }
 }
