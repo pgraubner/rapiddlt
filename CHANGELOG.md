@@ -9,11 +9,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [0.2.1] - 2024-02-16
 
+### Added
+- test: valid verbose DLT files
+
 ### Changed
- - matchit::generator::merge: changed from reducer to adapter implementation
+- matchit::generator::merge: changed from reducer to adapter implementation
 
 ### Fixed
- - Cargo.toml contained wrong versions
+- Cargo.toml contained wrong versions
 
 ## [0.2.0] - 2024-02-13
 
