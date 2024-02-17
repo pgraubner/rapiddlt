@@ -250,31 +250,6 @@ impl MessageType {
 
         Self { msin }
     }
-
-    pub fn trace_message(verbose: bool) -> Self {
-        let mut msin: u8 = 0;
-        if verbose {
-            msin = 0x1;
-        }
-        Self { msin }
-    }
-
-    pub fn network_message(verbose: bool) -> Self {
-        let mut msin: u8 = 0;
-        if verbose {
-            msin = 0x1;
-        }
-        Self { msin }
-    }
-
-    pub fn control_message(verbose: bool) -> Self {
-        let mut msin: u8 = 0;
-        if verbose {
-            msin = 0x1;
-        }
-        Self { msin }
-    }
-
 }
 
 
