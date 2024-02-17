@@ -2,7 +2,7 @@
 use std::{env, io::{self, Read, Write}, u16};
 
 use zerocopy::{big_endian::U32, AsBytes};
-use rapiddlt::dlt_v1::{DltExtendedHeader, DltHTyp, MessageType, DltStandardHeader, DltStorageHeader};
+use rapiddlt::dlt_v1::{DltExtendedHeader, DltHTyp, DltLogMessageTypeInfo, DltMessageType, DltStandardHeader, DltStorageHeader, MessageType};
 
 fn main() -> Result<(), std::io::Error> {
     let args: Vec<String> = env::args().collect();
@@ -40,7 +40,12 @@ fn main() -> Result<(), std::io::Error> {
         let len = 4 + 10 + 4 + payload_size;
         let htyp = DltHTyp::new(true, false, false, false, true, 0x1);
         let h = DltStandardHeader::new(htyp, count as u8, len);
-        let eh = DltExtendedHeader::new(MessageType::log_message(true), 0, appid.try_into().expect("app id incorrect"), appid.try_into().expect("app id incorrect"));
+        let eh = DltExtendedHeader::new(
+                MessageType::create_message_type(true, DltMessageType::DltTypeLog(DltLogMessageTypeInfo::DltLogInfo)),
+                0,
+                appid.try_into().expect("app id incorrect"),
+                appid.try_into().expect("app id incorrect")
+        );
 
         io::stdout().write(sh.as_bytes())?;
         io::stdout().write(h.as_bytes())?;

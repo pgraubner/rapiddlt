@@ -90,7 +90,7 @@ fn continuous_timestamp_histogram(mmap: DltBuffer) -> BTreeMap<usize, usize> {
     result.split(|id| *id as usize , |_| Generator::count() )
 }
 
-fn mstp_info_histogram(mmap: DltBuffer) -> BTreeMap<(bool, DltMessageType), usize> {
+fn mstp_info_histogram(mmap: DltBuffer) -> BTreeMap<(bool, Option<DltMessageType>), usize> {
     let it = dltit(mmap.as_slice());
 
     it

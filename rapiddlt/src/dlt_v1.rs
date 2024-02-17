@@ -135,24 +135,21 @@ struct DltStandardHeaderExtra {
     pub tmsp: U32               // < Timestamp since system start in 0.1 milliseconds
 }
 
+
+#[derive(PartialEq, PartialOrd, Ord, Eq, Copy, Clone, Debug)]
 #[allow(dead_code)]
-enum DltMessageInfoMask {
-    Verbose = 0x1,
-    MessageType = 0x7 << 1,
-    MessageTypeInfo = 0x15 << 4,
+#[repr(u8)]
+pub enum DltMessageType {
+    DltTypeLog(DltLogMessageTypeInfo) = 0x0, // Dlt Log Message
+    DltTypeAppTrace(DltTraceMessageTypeInfo) = 0x1, // Dlt Trace Message
+    DltTypeNwTrace(DltNetworkMessageTypeInfo) = 0x2, // Dlt Network Message
+    DltTypeControl(DltControlMessageTypeInfo) = 0x3, // Dlt Control Messag
 }
 
 #[derive(FromPrimitive)]
 #[derive(PartialEq, PartialOrd, Ord, Eq, Copy, Clone, Debug)]
 #[allow(dead_code)]
-pub enum DltMessageType {
-    DltTypeLog = 0x0, // Dlt Log Message
-    DltTypeAppTrace = 0x1, // Dlt Trace Message
-    DltTypeNwTrace = 0x2, // Dlt Network Message
-    DltTypeControl = 0x3, // Dlt Control Messag
-}
-
-#[allow(dead_code)]
+#[repr(u8)]
 pub enum DltLogMessageTypeInfo {
     DltLogFatal = 0x1,     // Fatal system error
     DltLogDltError = 0x2,   // Application error
@@ -162,6 +159,8 @@ pub enum DltLogMessageTypeInfo {
     DltLogVerbose = 0x6,     // Message of LogLevel type 'Verbose'
 }
 
+#[derive(FromPrimitive)]
+#[derive(PartialEq, PartialOrd, Ord, Eq, Copy, Clone, Debug)]
 #[allow(dead_code)]
 pub enum DltTraceMessageTypeInfo {
     DltTraceVariable = 0x1,        // Value of variable
@@ -170,7 +169,11 @@ pub enum DltTraceMessageTypeInfo {
     DltTraceState = 0x4,       // State of a State Machine
     DltTraceVfb = 0x5,         // RTE events
 }
+
+#[derive(FromPrimitive)]
+#[derive(PartialEq, PartialOrd, Ord, Eq, Copy, Clone, Debug)]
 #[allow(dead_code)]
+#[repr(u8)]
 pub enum DltNetworkMessageTypeInfo {
     DltNwTraceIpc = 0x1,      // Inter-Process-Communication
     DltNwTraceCan = 0x2,      // CAN Communications bus
@@ -179,10 +182,21 @@ pub enum DltNetworkMessageTypeInfo {
     DltNwTraceEthernet = 0x5,         // Ethernet Communications bus
     DltNwTraceSomeip = 0x6,       // Inter-SOME/IP Communication
 }
+
+#[derive(FromPrimitive)]
+#[derive(PartialEq, PartialOrd, Ord, Eq, Copy, Clone, Debug)]
 #[allow(dead_code)]
+#[repr(u8)]
 pub enum DltControlMessageTypeInfo {
     DltControlRequest = 0x1,       // Request Control Message
     DltControlResponse = 0x2,      // Respond Control Message
+}
+
+#[allow(dead_code)]
+enum DltMessageInfoMask {
+    Verbose = 0x1,
+    MessageType = 0x7 << 1,
+    MessageTypeInfo = 0x15 << 4,
 }
 
 #[derive(AsBytes,FromBytes,FromZeroes)]
@@ -196,20 +210,45 @@ impl MessageType {
     pub fn is_verbose(&self) -> bool {
         self.msin & (DltMessageInfoMask::Verbose as u8) > 0
     }
-    pub fn message_type(&self) -> DltMessageType {
-        let val = (self.msin & (DltMessageInfoMask::MessageType as u8)) >> 1;
-        DltMessageType::from_u8(val).unwrap()
+    pub fn message_type(&self) -> Option<DltMessageType> {
+        let mtin = (self.msin & (DltMessageInfoMask::MessageTypeInfo as u8)) >> 4;
+        match (self.msin & (DltMessageInfoMask::MessageType as u8)) >> 1 {
+            0x0 => Some(DltMessageType::DltTypeLog(DltLogMessageTypeInfo::from_u8(mtin)?)),
+            0x1 => Some(DltMessageType::DltTypeAppTrace(DltTraceMessageTypeInfo::from_u8(mtin)?)),
+            0x2 => Some(DltMessageType::DltTypeNwTrace(DltNetworkMessageTypeInfo::from_u8(mtin)?)),
+            0x3 => Some(DltMessageType::DltTypeControl(DltControlMessageTypeInfo::from_u8(mtin)?)),
+            _ => None
+        }
     }
-    pub fn info(&self) -> (bool, DltMessageType) {
+    pub fn info(&self) -> (bool, Option<DltMessageType>) {
         (self.is_verbose(),  self.message_type())
     }
 
-    pub fn log_message(verbose: bool) -> Self {
+    pub fn create_message_type(verbose: bool, typ: DltMessageType) -> Self {
         let mut msin: u8 = 0;
         if verbose {
             msin = 0x1;
         }
-        Self { msin}
+        match typ {
+            DltMessageType::DltTypeLog(mtin) => {
+                msin |= ((DltMessageType::DltTypeLog as u8) << 1) & (DltMessageInfoMask::MessageType as u8);
+                msin |= ((mtin as u8) << 4) & (DltMessageInfoMask::MessageTypeInfo as u8);
+            },
+            DltMessageType::DltTypeAppTrace(mtin) => {
+                msin |= ((DltMessageType::DltTypeAppTrace as u8) << 1) & (DltMessageInfoMask::MessageType as u8);
+                msin |= ((mtin as u8) << 4) & (DltMessageInfoMask::MessageTypeInfo as u8);
+            },
+            DltMessageType::DltTypeNwTrace(mtin) => {
+                msin |= ((DltMessageType::DltTypeNwTrace as u8) << 1) & (DltMessageInfoMask::MessageType as u8);
+                msin |= ((mtin as u8) << 4) & (DltMessageInfoMask::MessageTypeInfo as u8);
+            },
+            DltMessageType::DltTypeControl(mtin) => {
+                msin |= ((DltMessageType::DltTypeControl as u8) << 1) & (DltMessageInfoMask::MessageType as u8);
+                msin |= ((mtin as u8) << 4) & (DltMessageInfoMask::MessageTypeInfo as u8);
+            },
+        }
+
+        Self { msin }
     }
 
     pub fn trace_message(verbose: bool) -> Self {

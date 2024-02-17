@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Added
 - ripdlt: mstp_info_histogram
 
+### Changed
+- dd_dlt: changed message types to DltTypeLog(DltLogInfo)
+
+### Fixed
+- rapiddlt::dlt_v1: Extended Header Message Info support
+- CHANGELOG.md indentation
+
 ## [0.2.1] - 2024-02-16
 
 ### Added
