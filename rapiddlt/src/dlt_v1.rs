@@ -4,6 +4,9 @@ use matchit::{read_typed_offset, FromBytesReadableTrait, NoOffsetIterator};
 use zerocopy_derive::{AsBytes, FromBytes, FromZeroes};
 use zerocopy::{byteorder::big_endian::*, little_endian};
 
+use num_derive::FromPrimitive;
+use num_traits::FromPrimitive;
+
 #[derive(AsBytes,FromBytes,FromZeroes,Debug)]
 #[repr(C)]
 pub struct DltHTyp {
@@ -42,27 +45,27 @@ impl DltHTyp {
     }
 
     #[inline(always)]
-    fn is_extended_header(&self) -> bool {
+    pub fn is_extended_header(&self) -> bool {
         (self.htyp & DltHTypMask::UseExtendedHeader as u8) > 0
     }
     #[inline(always)]
-    fn is_msb_first(&self) -> bool {
+    pub fn is_msb_first(&self) -> bool {
         (self.htyp & DltHTypMask::MostSignificantByteFirst as u8) > 0
     }
     #[inline(always)]
-    fn is_with_ecu_id(&self) -> bool {
+    pub fn is_with_ecu_id(&self) -> bool {
         (self.htyp & DltHTypMask::WithEcuId as u8) > 0
     }
     #[inline(always)]
-    fn is_with_session_id(&self) -> bool {
+    pub fn is_with_session_id(&self) -> bool {
         (self.htyp & DltHTypMask::WithSessionId as u8) > 0
     }
-    #[inline(always)]pub
-    fn is_with_timestamp(&self) -> bool {
+    #[inline(always)]
+    pub fn is_with_timestamp(&self) -> bool {
         (self.htyp & DltHTypMask::WithTimestamp as u8) > 0
     }
     #[inline(always)]
-    fn version(&self) -> u8 {
+    pub fn version(&self) -> u8 {
         (self.htyp & DltHTypMask::Version as u8) >> 5
     }
 }
@@ -133,14 +136,16 @@ struct DltStandardHeaderExtra {
 }
 
 #[allow(dead_code)]
-enum MessageInfoMask {
+enum DltMessageInfoMask {
     Verbose = 0x1,
     MessageType = 0x7 << 1,
     MessageTypeInfo = 0x15 << 4,
 }
 
+#[derive(FromPrimitive)]
+#[derive(PartialEq, PartialOrd, Ord, Eq, Copy, Clone, Debug)]
 #[allow(dead_code)]
-pub enum MessageType {
+pub enum DltMessageType {
     DltTypeLog = 0x0, // Dlt Log Message
     DltTypeAppTrace = 0x1, // Dlt Trace Message
     DltTypeNwTrace = 0x2, // Dlt Network Message
@@ -180,13 +185,25 @@ pub enum DltControlMessageTypeInfo {
     DltControlResponse = 0x2,      // Respond Control Message
 }
 
-#[derive(AsBytes,FromBytes,FromZeroes,Debug)]
+#[derive(AsBytes,FromBytes,FromZeroes)]
+#[derive(PartialEq, PartialOrd, Ord, Eq, Copy, Clone, Debug)]
 #[repr(C)]
-pub struct DltMsinType {
+pub struct MessageType {
     msin: u8
 }
 
-impl DltMsinType {
+impl MessageType {
+    pub fn is_verbose(&self) -> bool {
+        self.msin & (DltMessageInfoMask::Verbose as u8) > 0
+    }
+    pub fn message_type(&self) -> DltMessageType {
+        let val = (self.msin & (DltMessageInfoMask::MessageType as u8)) >> 1;
+        DltMessageType::from_u8(val).unwrap()
+    }
+    pub fn info(&self) -> (bool, DltMessageType) {
+        (self.is_verbose(),  self.message_type())
+    }
+
     pub fn log_message(verbose: bool) -> Self {
         let mut msin: u8 = 0;
         if verbose {
@@ -225,14 +242,14 @@ impl DltMsinType {
 #[derive(AsBytes,FromBytes,FromZeroes,Debug)]
 #[repr(C)]
 pub struct DltExtendedHeader {
-    msin: DltMsinType,         // < messsage info
-    noar: u8,         // < number of arguments
-    apid: [u8; 4],    // < application id
-    ctid: [u8; 4],    // < context id
+    pub msin: MessageType,         // < messsage info
+    pub noar: u8,         // < number of arguments
+    pub apid: [u8; 4],    // < application id
+    pub ctid: [u8; 4],    // < context id
 }
 
 impl DltExtendedHeader {
-    pub fn new(msin: DltMsinType, noar: u8, apid: [u8; 4], ctid: [u8; 4]) -> Self {
+    pub fn new(msin: MessageType, noar: u8, apid: [u8; 4], ctid: [u8; 4]) -> Self {
         Self { msin, noar, apid, ctid }
     }
 }
@@ -329,6 +346,25 @@ impl<'bytes> DltEntry<'bytes> {
             None
         }
     }
+    #[inline(always)]
+    pub fn extended_header(&self) -> Option<&DltExtendedHeader> {
+        if !self.header.header_type.is_extended_header() {
+            return None
+        }
+        let mut offset = 0usize;
+        let result;
+        if self.header.header_type.is_with_ecu_id() {
+            offset += 4;
+        }
+        if self.header.header_type.is_with_session_id() {
+            offset += 4;
+        }
+        if self.header.header_type.is_with_timestamp() {
+            offset += 4;
+        }
+        (_, result) = read_typed_offset::<DltExtendedHeader>(&self.tail[offset..])?;
+        Some(result)
+    }
 
     #[inline(always)]
     pub fn payload(&self) -> Option<&[u8]> {
@@ -343,7 +379,7 @@ impl<'bytes> DltEntry<'bytes> {
             offset += 4;
         }
         if self.header.header_type.is_extended_header() {
-            let (off, _) = read_typed_offset::<DltExtendedHeader>(self.tail)?;
+            let (off, _) = read_typed_offset::<DltExtendedHeader>(&self.tail[offset..])?;
             offset += off;
         }
         if offset > self.tail.len() {

@@ -1,5 +1,5 @@
 
-use rapiddlt::{dlt_v1::{DltStorageEntry, dltit}, dltbuffer::DltBuffer, DltGrepIterator};
+use rapiddlt::{dlt_v1::{dltit, DltMessageType, DltStorageEntry}, dltbuffer::DltBuffer, DltGrepIterator};
 use matchit::{fromgenerator::FromAdaptFnCall, generator::generator::Generator, FromBytesReadableTrait };
 use matchit::generator::adapter::AdapterTrait;
 
@@ -88,6 +88,14 @@ fn continuous_timestamp_histogram(mmap: DltBuffer) -> BTreeMap<usize, usize> {
         .map(|r| r.1.storage_header.secs.get() - r.0.storage_header.secs.get())
     ;
     result.split(|id| *id as usize , |_| Generator::count() )
+}
+
+fn mstp_info_histogram(mmap: DltBuffer) -> BTreeMap<(bool, DltMessageType), usize> {
+    let it = dltit(mmap.as_slice());
+
+    it
+        .filter(|dlt| dlt.dlt.header.header_type.is_extended_header())
+        .split(|dlt|  dlt.dlt.extended_header().unwrap().msin.info(), |_| Generator::count() )
 }
 
 fn lifecycle_splitit(mmap: DltBuffer) -> BTreeMap<[u8;4],  (BTreeMap<u32, usize>, usize)> {
@@ -269,13 +277,13 @@ fn main() {
                 println!("{:?}-{:?} secs: {:?}", k, k+1, v);
             }
         },
-
-        "histogram_hello_world" =>{
-            println!("Distribution of 'Hello World' matches:");
-            for (k,v) in histogram_hello_world(mmap) {
-                println!("Offset {:?}M-{:?}M: {:?}", k*IDX_BUCKET_SIZE / 1000000, (k+1)*IDX_BUCKET_SIZE / 1000000, v);
+        "histogram_message_type" =>{
+            println!("(verbose, message type): # dlt messages");
+            for (mstp,v) in mstp_info_histogram(mmap) {
+                println!("{:?}: {:?}", mstp, v);
             }
         },
+
         "histogram_payload_size" =>{
             println!("Distribution of payload length:");
             let mut total_size = 0;
@@ -301,6 +309,14 @@ fn main() {
             let r = count(mmap.as_slice());
             println!("{:?} messages", r);
         }
+
+        // Hello World search
+        "histogram_hello_world" =>{
+            println!("Distribution of 'Hello World' matches:");
+            for (k,v) in histogram_hello_world(mmap) {
+                println!("Offset {:?}M-{:?}M: {:?}", k*IDX_BUCKET_SIZE / 1000000, (k+1)*IDX_BUCKET_SIZE / 1000000, v);
+            }
+        },
         "count_hello_world" => {
             let r = count_hello_world(mmap.as_slice());
             println!("{:?} hello world messages", r);
