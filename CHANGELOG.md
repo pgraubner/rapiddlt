@@ -9,9 +9,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Added
 - ripdlt: mstp_info_histogram
+- ripdlt: par_timestamp_splitit, par_count
+- matchit::ContainedBySearch: test recursively whether a given slice is contained by another instance of T
 
 ### Changed
 - dd_dlt: changed message types to DltTypeLog(DltLogInfo)
+- dltbuffer::DltBuffer::partition_from based on ContainedBySearch::contained_by
 
 ### Fixed
 - rapiddlt::dlt_v1: Extended Header Message Info support

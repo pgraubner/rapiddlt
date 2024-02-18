@@ -71,7 +71,7 @@ impl DltBuffer {
                 break;
             }
 
-            let mut new_candidate1 = candidate.1 + size;
+            let new_candidate1 = candidate.1 + size;
             if new_candidate1 >= bytes.len() {
                 result.push(&bytes[candidate.0..]);
                 break;                

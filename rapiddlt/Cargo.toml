@@ -10,6 +10,5 @@ matchit = { path = "../matchit" }
 zerocopy = "0.7.32"
 zerocopy-derive = "0.7.32"
 memmap = "0.7.0"
-memchr = "2.3.1"
 num-traits = "0.2"
 num-derive = "0.2"

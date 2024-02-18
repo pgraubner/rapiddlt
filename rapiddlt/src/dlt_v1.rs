@@ -1,7 +1,7 @@
 
 use matchit::searchable::SearchableMarkerTrait;
 use matchit::{read_typed_offset, FromBytesReadableTrait, NoOffsetIterator};
-use memchr::memmem::{FindIter, Finder};
+
 use zerocopy_derive::{AsBytes, FromBytes, FromZeroes};
 use zerocopy::{byteorder::big_endian::*, little_endian};
 

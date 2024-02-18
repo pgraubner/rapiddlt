@@ -82,7 +82,7 @@ fn par_timestamp_splitit(mmap: DltBuffer) -> BTreeMap<[u8; 4], (BTreeMap<u32, us
 
     result.reduce(|| BTreeMap::new(), |mut acc,next| {
         for (k,v) in next {
-            let mut e = acc.entry(k).or_default();
+            let e = acc.entry(k).or_default();
             for (k1,v1) in v.0 {
                 let e1 = (*e).0.entry(k1).or_default();
                 *e1 += v1;
@@ -380,7 +380,10 @@ fn main() {
             let r = count(mmap.as_slice());
             println!("{:?} messages", r);
         }
-
+        "par_count" => {
+            let r = multithreaded(mmap, ProcessingType::Count);
+            println!("{:?} messages", r);
+        }
         // Hello World search
         "histogram_hello_world" =>{
             println!("Distribution of 'Hello World' matches:");
@@ -398,10 +401,6 @@ fn main() {
         }
         "count_hello_world_grepit" => {
             let r = count_hello_world_grepit(mmap.as_slice());
-            println!("{:?} hello world messages", r);
-        }
-        "par_count" => {
-            let r = multithreaded(mmap, ProcessingType::Count);
             println!("{:?} hello world messages", r);
         }
         "par_count_hello_world" => {
