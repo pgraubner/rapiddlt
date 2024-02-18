@@ -16,7 +16,8 @@ In addition, ``rapiddlt`` makes use of some experimental tweaks that can further
 
 The basic concept of these experimental tweaks is to ignore the sequential character of a DLT file, perform random accesses on raw data and parse (i.e., reconstruct) the corresponding DLT message only in case something interesting was found. Messages are reconstructed by searching the offset of the last DLT pattern, which is stored in front of every DLT message.
 
-These tweaks take into account the possibility of false positive matches, which might not be acceptable in all use cases. On the other hand, if false positive matches are acceptable then these tweaks can significantly boost your processing performance.
+~~These tweaks take into account the possibility of false positive matches, which might not be acceptable in all use cases. On the other hand, if false positive matches are acceptable then these tweaks can significantly boost your processing performance.~~
+These tweaks make use of a recursive search to avoid false positive matches. However, this recursive search comes with a high performance penalty, which is acceptable to enable data-parallelism, but may not be acceptable to check a higher number of candidate matches.
 
 ``rapiddlt`` is 'work-in-progress'. Do not yet expect stable interfaces. Currently, only DLTv1 files are supported. In order to be future-proof for DLTv2, the main concepts have been abstracted with the help of traits from the internal ``matchit`` library.
 
