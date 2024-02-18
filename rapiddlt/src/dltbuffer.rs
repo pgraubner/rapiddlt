@@ -1,9 +1,9 @@
 use std::{fs::File, io::{self, BufReader, Read}};
 
 use memmap::MmapOptions;
-use matchit::searchable::{search_last_marker, search_marker, SearchableMarkerTrait};
+use matchit::{searchable::{search_last_marker, search_marker, SearchableMarkerTrait}, ContainedBySearch};
 
-use crate::dlt_v1::reconstruct;
+use crate::dlt_v1::{DltStorageEntry};
 
 pub enum DltBuffer {
     Mmap(memmap::Mmap),
@@ -34,15 +34,18 @@ impl DltBuffer {
             DltBuffer::Read(vector) => vector.as_slice(),
         }
     }
+
     pub fn partition_from<'bytes, T: SearchableMarkerTrait<'bytes>>(bytes: &'bytes [u8], num: usize) -> Vec<&'bytes [u8]> {
         let mut result: Vec<&[u8]> = vec![];
 
         let size = bytes.len() / num;
         let mut candidate = (0, size);
+        let search = ContainedBySearch::<DltStorageEntry>::new();
+
         loop {
             match search_last_marker::<T>(&bytes[..candidate.1]) {
                 Some(idx) => {
-                    match reconstruct(bytes, (idx, idx + T::marker().len())) {
+                    match search.contained_by(bytes, (idx, idx + T::marker().len())) {
                         Some((new_idx, se)) => {
                             if new_idx <= candidate.0 {
                                 candidate.0 = match search_marker::<T>(&bytes[new_idx + se.len()..]) {

@@ -8,8 +8,10 @@ pub mod fromgenerator;
 pub mod readit;
 
 
-use std::mem;
+use std::{marker::PhantomData, mem};
 
+use memchr::memmem::Finder;
+use searchable::SearchableMarkerTrait;
 use zerocopy::{FromBytes};
 
 pub type WithOffset<T> = (usize, T);
@@ -87,6 +89,52 @@ pub fn read_typed_offset<T>(bytes: &[u8]) -> Option<(usize, &T)>
     if offset <= bytes.len() {
         Some((offset, T::ref_from_prefix(bytes)?))
     } else {
+        None
+    }
+}
+
+pub struct ContainedBySearch<T>(Finder<'static>, PhantomData<T>);
+
+impl<'bytes, T> ContainedBySearch<T> 
+where
+    T: SearchableMarkerTrait<'bytes>
+{
+    pub fn new() -> Self {
+        Self(Finder::new(T::marker()), PhantomData)
+    }
+
+    #[inline(always)]
+    pub fn contained_by(&self, bytes: &'bytes [u8], payload: (usize, usize)) -> Option<(usize, T)> 
+    {
+        if payload.0 >= bytes.len() || payload.1 >= bytes.len()  || payload.0 >= payload.1 || payload.1 == 0 {
+            return None
+        }
+        
+        // go back max payload size
+        let backwards_offset = match payload.0.checked_sub(u16::MAX as usize) {
+            Some(val) => val,
+            None => 0,
+        };
+        
+        let iter = self.0.find_iter(&bytes[backwards_offset..]);
+        
+        for candidate_idx in iter.map(|x| x + backwards_offset) {
+            if let Some((_, container)) = T::try_read_valid_marker(&bytes[candidate_idx..]) {
+                // must not be the same as payload
+                if candidate_idx == payload.0 {
+                    return None
+                }
+
+                // needs to contain payload.1
+                if candidate_idx + container.len() >= payload.1 {
+                    // recursively check whether the current container is contained in another container
+                    return match self.contained_by(bytes, (candidate_idx, candidate_idx + T::marker().len())) {
+                        Some(v) => Some(v),
+                        None => Some((candidate_idx, container)),
+                    };
+                }
+            }
+        }
         None
     }
 }
