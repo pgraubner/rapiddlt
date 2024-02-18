@@ -1,6 +1,7 @@
 
 use matchit::searchable::SearchableMarkerTrait;
 use matchit::{read_typed_offset, FromBytesReadableTrait, NoOffsetIterator};
+use memchr::memmem::{FindIter, Finder};
 use zerocopy_derive::{AsBytes, FromBytes, FromZeroes};
 use zerocopy::{byteorder::big_endian::*, little_endian};
 
@@ -435,6 +436,36 @@ pub fn dltit_offset(b: &[u8] ) -> DltIterator< DltStorageEntry> {
 pub fn dltit(b: &[u8] ) -> NoOffsetIterator<DltIterator< DltStorageEntry>, DltStorageEntry> {
     NoOffsetIterator::new(DltIterator::new(b, 0))
 }
+
+pub fn reconstruct<'bytes>(bytes: &'bytes [u8], offset: (usize, usize)) -> Option<(usize, DltStorageEntry)> {
+    if offset.0 >= bytes.len() || offset.1 >= bytes.len() {
+        return None
+    }
+    
+    // go back max payload size
+    let candidate_offset = match offset.0.checked_sub(u16::MAX as usize) {
+        Some(val) => val,
+        None => 0,
+    };
+    let finder = Finder::new(DltStorageEntry::marker());
+    let iter = finder.find_iter(&bytes[candidate_offset..]);
+    
+    for _idx in iter {
+        let idx = _idx + candidate_offset;
+        if let Some((_, se)) = DltStorageEntry::try_read_valid_marker(&bytes[idx..]) {
+            let dlt_candidate = (idx, idx+FromBytesReadableTrait::len(&se));
+            // needs to contain offset.1
+            if dlt_candidate.1 >= offset.1 {
+                return Some((idx, se));
+            }
+            continue;
+        } else {
+            continue;
+        }
+    }
+    None
+}
+
 
 #[cfg(test)]
 mod tests {

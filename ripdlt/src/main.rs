@@ -7,6 +7,7 @@ const MIN_TIME_DMS: u32 = 18000000; // Timestamp since system start in 0.1 milli
 
 enum ProcessingType {
     Iterative,
+    Count,
     CtrlMsg,
     CtrlMsgRaw,
     CtrlMsgGrepIt
@@ -26,6 +27,7 @@ fn multithreaded(mmap: DltBuffer, typ: ProcessingType) -> usize {
         .map(|slice| {
             match typ {
             ProcessingType::Iterative => lifecycle_iter(slice),
+            ProcessingType::Count => count(slice),
             ProcessingType::CtrlMsg => count_hello_world(slice),
             ProcessingType::CtrlMsgRaw => count_hello_world_raw(slice),
             ProcessingType::CtrlMsgGrepIt => count_hello_world_grepit(slice),
@@ -34,6 +36,63 @@ fn multithreaded(mmap: DltBuffer, typ: ProcessingType) -> usize {
 
     result.sum()
 }
+
+fn par_continuous_timestamp_histogram(mmap: DltBuffer) -> BTreeMap<usize, usize>
+{
+    use rayon::prelude::*;
+
+    use std::thread::available_parallelism;
+
+    let num: usize = available_parallelism().unwrap().get();
+    let slices = mmap.partition::<DltStorageEntry>(num);
+    println!("available parallelism = {}, slices = {}", num, slices.len());
+
+    let result =
+    slices.into_par_iter()
+        .map(|slice| {
+            continuous_timestamp_histogram(slice)
+            }
+        );
+
+    result.reduce(|| BTreeMap::new(), |mut acc,next| {
+        for (k,v) in next {
+            let e = acc.entry(k).or_insert(0);
+            *e += v; 
+        }
+        acc
+    })
+}
+
+fn par_timestamp_splitit(mmap: DltBuffer) -> BTreeMap<[u8; 4], (BTreeMap<u32, usize>, usize)>
+{
+    use rayon::prelude::*;
+
+    use std::thread::available_parallelism;
+
+    let num: usize = available_parallelism().unwrap().get();
+    let slices = mmap.partition::<DltStorageEntry>(num);
+    println!("available parallelism = {}, slices = {}", num, slices.len());
+
+    let result =
+    slices.into_par_iter()
+        .map(|slice| {
+            timestamp_splitit(slice)
+            }
+        );
+
+    result.reduce(|| BTreeMap::new(), |mut acc,next| {
+        for (k,v) in next {
+            let mut e = acc.entry(k).or_default();
+            for (k1,v1) in v.0 {
+                let e1 = (*e).0.entry(k1).or_default();
+                *e1 += v1;
+            }
+            (*e).1 += v.1;
+        }
+        acc
+    })
+}
+
 
 fn count(mmap: &[u8]) -> usize {
     let it = dltit(mmap);
@@ -79,8 +138,8 @@ fn count_hello_world_grepit(mmap: &[u8]) -> usize {
 //         .split(|id| *id as usize / 10000, |_| Generator::count() )
 // }
 
-fn continuous_timestamp_histogram(mmap: DltBuffer) -> BTreeMap<usize, usize> {
-    let it = dltit(mmap.as_slice());
+fn continuous_timestamp_histogram(mmap: &[u8]) -> BTreeMap<usize, usize> {
+    let it = dltit(mmap);
     let predicate = |a: &DltStorageEntry<'_>, b: &DltStorageEntry<'_>| b.storage_header.secs.get() >= a.storage_header.secs.get();
 
     let result = it
@@ -137,8 +196,8 @@ fn merge_overlapping_timestamps<'a>(a: &(DltStorageEntry<'a>, DltStorageEntry<'a
     }
 }
 
-fn timestamp_splitit(mmap: DltBuffer) -> BTreeMap<[u8; 4], (BTreeMap<u32, usize>, usize)> { // BTreeMap<[u8; 4], (usize, usize)>
-    let it: matchit::NoOffsetIterator<matchit::searchable::readfallbackit::ReadFallbackIterator<'_, DltStorageEntry<'_>>, DltStorageEntry<'_>> = dltit(mmap.as_slice());
+fn timestamp_splitit(mmap: &[u8]) -> BTreeMap<[u8; 4], (BTreeMap<u32, usize>, usize)> { // BTreeMap<[u8; 4], (usize, usize)>
+    let it: matchit::NoOffsetIterator<matchit::searchable::readfallbackit::ReadFallbackIterator<'_, DltStorageEntry<'_>>, DltStorageEntry<'_>> = dltit(mmap);
 
     let predicate = |a: &DltStorageEntry<'_>, b: &DltStorageEntry<'_>| b.storage_header.secs.get() >= a.storage_header.secs.get();
     let time_delta = |r: &(DltStorageEntry<'_>,DltStorageEntry<'_>)| r.1.storage_header.secs.get() - r.0.storage_header.secs.get();
@@ -267,13 +326,25 @@ fn main() {
         },
         "split_timestamp" =>{
             println!("Durations of periods where DLT storage header timestamps are continuous:");
-            for (k,v) in timestamp_splitit(mmap) {
+            for (k,v) in timestamp_splitit(mmap.as_slice()) {
+                println!("{} #lifecycles: {:?}", String::from_utf8(k.to_vec()).unwrap(), v);
+            }
+        },
+        "par_split_timestamp" =>{
+            println!("Durations of periods where DLT storage header timestamps are continuous:");
+            for (k,v) in par_timestamp_splitit(mmap) {
                 println!("{} #lifecycles: {:?}", String::from_utf8(k.to_vec()).unwrap(), v);
             }
         },
         "histogram_timestamp" =>{
             println!("Durations of periods where DLT storage header timestamps are continuous:");
-            for (k,v) in continuous_timestamp_histogram(mmap) {
+            for (k,v) in continuous_timestamp_histogram(mmap.as_slice()) {
+                println!("{:?}-{:?} secs: {:?}", k, k+1, v);
+            }
+        },
+        "par_histogram_timestamp" =>{
+            println!("Durations of periods where DLT storage header timestamps are continuous:");
+            for (k,v) in par_continuous_timestamp_histogram(mmap) {
                 println!("{:?}-{:?} secs: {:?}", k, k+1, v);
             }
         },
@@ -327,6 +398,10 @@ fn main() {
         }
         "count_hello_world_grepit" => {
             let r = count_hello_world_grepit(mmap.as_slice());
+            println!("{:?} hello world messages", r);
+        }
+        "par_count" => {
+            let r = multithreaded(mmap, ProcessingType::Count);
             println!("{:?} hello world messages", r);
         }
         "par_count_hello_world" => {
