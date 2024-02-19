@@ -6,12 +6,13 @@ mod testit;
 
 use memchr::memmem;
 
-pub trait SearchableMarkerTrait<'bytes>
+use crate::FromBytesReadableTrait;
+
+pub trait SearchableMarkerTrait<'bytes>: FromBytesReadableTrait<'bytes>
         where Self: Sized {
 
     fn marker() -> &'static[u8];
     fn try_read_valid_marker(bytes: &'bytes [u8]) -> Option<(usize, Self)>;
-    fn len(&self) -> usize;
 }
 
 

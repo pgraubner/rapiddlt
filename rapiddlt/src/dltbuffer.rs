@@ -40,34 +40,22 @@ impl DltBuffer {
 
         let size = bytes.len() / num;
         let mut candidate = (0, size);
-        let search = ContainedBySearch::<DltStorageEntry>::new();
 
+        let search = ContainedBySearch::<T>::new();
         loop {
-            match search_last_marker::<T>(&bytes[..candidate.1]) {
-                Some(idx) => {
-                    match search.contained_by(bytes, (idx, idx + T::marker().len())) {
-                        Some((new_idx, se)) => {
-                            if new_idx <= candidate.0 {
-                                candidate.0 = match search_marker::<T>(&bytes[new_idx + se.len()..]) {
-                                    Some(idx) => idx,
-                                    None => bytes.len()
-                                };
-                                candidate.1 = candidate.0 + size;
-                            } else {
-                                candidate.1 = new_idx;
-                            }
-                        },
-                        None => {candidate.1 = idx;},
-                    };
+            candidate.1 = match search.contained_by(bytes, (candidate.1, candidate.1+1)) {
+                Some((container ,_)) => {
+                    container
                 },
                 None => {
-                    candidate.1 = bytes.len();
+                    candidate.1
                 },
-            }
+            };
+            
             if candidate.0 >= bytes.len() || candidate.1 >= bytes.len() {
                 break;
             }
-            if candidate.0 == candidate.1 {
+            if candidate.0 >= candidate.1 {
                 break;
             }
 
@@ -80,6 +68,45 @@ impl DltBuffer {
                 candidate = (candidate.1, new_candidate1);    
             }
         }
+
+        // loop {
+        //     match search_last_marker::<T>(&bytes[..candidate.1]) {
+        //         Some(idx) => {
+        //             match search.contained_by(bytes, (idx, idx + T::marker().len())) {
+        //                 Some((new_idx, se)) => {
+        //                     if new_idx <= candidate.0 {
+        //                         candidate.0 = match search_marker::<T>(&bytes[new_idx + se.len()..]) {
+        //                             Some(idx) => idx,
+        //                             None => bytes.len()
+        //                         };
+        //                         candidate.1 = candidate.0 + size;
+        //                     } else {
+        //                         candidate.1 = new_idx;
+        //                     }
+        //                 },
+        //                 None => {candidate.1 = idx;},
+        //             };
+        //         },
+        //         None => {
+        //             candidate.1 = bytes.len();
+        //         },
+        //     }
+        //     if candidate.0 >= bytes.len() || candidate.1 >= bytes.len() {
+        //         break;
+        //     }
+        //     if candidate.0 == candidate.1 {
+        //         break;
+        //     }
+
+        //     let new_candidate1 = candidate.1 + size;
+        //     if new_candidate1 >= bytes.len() {
+        //         result.push(&bytes[candidate.0..]);
+        //         break;                
+        //     } else {
+        //         result.push(&bytes[candidate.0..candidate.1]);
+        //         candidate = (candidate.1, new_candidate1);    
+        //     }
+        // }
         result
 
     }
@@ -149,7 +176,7 @@ mod tests {
         let mut i = 0;
         for slice in slices.iter() {
             let dlt = DltStorageEntry::try_read(slice);
-            assert!(dlt.is_some(), "expect entry {} to be valid: {:?}", i, slice);
+            assert!(dlt.is_some(), "expect entry {} to be valid {:?}", i, &slice[..4]);
             i+=1;
         }
         assert_eq!(slices.iter().map(|s| s.len()).sum::<usize>(), 4686386400);

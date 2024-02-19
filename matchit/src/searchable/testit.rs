@@ -29,10 +29,6 @@ impl<'bytes> SearchableMarkerTrait<'bytes> for WrapTestStruct<'bytes> {
     fn try_read_valid_marker(bytes: &'bytes [u8]) -> Option<(usize, Self)> {
         try_read(bytes)
     }
-
-    fn len(&self) -> usize {
-        mem::size_of::<WrapTestStruct>()
-    }
 }
 
 
@@ -46,6 +42,10 @@ impl<'bytes> FromBytesReadableTrait<'bytes> for WrapTestStruct<'bytes> {
     }
 
     fn len(&self) -> usize {
+        mem::size_of::<WrapTestStruct>()
+    }
+
+    fn max_len() -> usize {
         mem::size_of::<WrapTestStruct>()
     }
 }

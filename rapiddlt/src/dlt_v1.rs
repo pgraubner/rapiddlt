@@ -301,11 +301,6 @@ impl<'bytes> SearchableMarkerTrait<'bytes> for DltStorageEntry<'bytes> {
     fn try_read_valid_marker(bytes: &'bytes [u8]) -> Option<(usize, Self)> {
         try_read(bytes)
     }
-
-    #[inline(always)]
-    fn len(&self) -> usize {
-        self.dlt.header.length() + mem::size_of::<DltStorageHeader>()
-    }
 }
 
 impl<'bytes> FromBytesReadableTrait<'bytes> for DltStorageEntry<'bytes> {
@@ -324,6 +319,10 @@ impl<'bytes> FromBytesReadableTrait<'bytes> for DltStorageEntry<'bytes> {
     #[inline(always)]
     fn len(&self) -> usize {
         self.dlt.header.length() + mem::size_of::<DltStorageHeader>()
+    }
+
+    fn max_len() -> usize {
+        u16::MAX as usize
     }
 }
 
@@ -424,6 +423,10 @@ impl<'bytes> FromBytesReadableTrait<'bytes> for DltEntry<'bytes> {
     #[inline(always)]
     fn len(&self) -> usize {
         self.header.length()
+    }
+
+    fn max_len() -> usize {
+        u16::MAX as usize
     }
 }
 
