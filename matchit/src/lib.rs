@@ -138,3 +138,50 @@ where
         None
     }
 }
+
+///
+/// ``partition_from::<T>``: create ``num`` partitions from a raw byte slice
+///   in a way that valid Ts do not overlap between partitions.
+/// 
+pub fn partition_from<'bytes, T: SearchableMarkerTrait<'bytes>>(bytes: &'bytes [u8], num: usize) -> Vec<&'bytes [u8]> {
+    let mut result: Vec<&[u8]> = vec![];
+
+    let size = bytes.len() / num;
+    let mut candidate = (0, size);
+
+    let search = ContainedBySearch::<T>::new();
+    loop {
+        // out of bounds checks: canidates may not exceed ``bytes`` slice and
+        if candidate.0 > bytes.len() || candidate.1 > bytes.len() {
+            break;
+        }
+        candidate.1 = match search.contained_by(bytes, (candidate.1, candidate.1+1)) {
+            Some((container ,_)) => {
+                // in ~99 percent of the cases, candidate.1 points to a valid T.
+                container
+            },
+            None => {
+                // if no containing T was found, candidate.1 points to invalid raw data,
+                // which is a valid split between two partitions. 
+                candidate.1
+            },
+        };
+        
+        // candidate.1 may not point to a container that is part of another partition
+        if candidate.0 >= candidate.1 {
+            break;
+        }
+
+        // store result and check for the next candidate for a split
+        if candidate.1 + size /4 >= bytes.len() {
+            result.push(&bytes[candidate.0..]);
+            break;                
+        } else {
+            result.push(&bytes[candidate.0..candidate.1]);
+            candidate = (candidate.1, candidate.1 + size);    
+        }
+    }
+
+    result
+
+}
