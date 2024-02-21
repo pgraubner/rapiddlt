@@ -1,9 +1,9 @@
 use std::mem;
 
-use zerocopy::{big_endian::U32};
+use zerocopy::{big_endian::U32, FromBytes};
 use zerocopy_derive::{FromBytes, FromZeroes};
 
-use crate::{read_typed, searchable::{SearchableMarkerTrait}, FromBytesReadableTrait};
+use crate::{searchable::{SearchableMarkerTrait}, FromBytesReadableTrait};
 
 #[derive(Debug,FromBytes, FromZeroes)]
 pub struct TestStruct {
@@ -17,8 +17,8 @@ pub struct WrapTestStruct<'bytes> {
 }
 
 fn try_read(bytes: & [u8]) -> Option<(usize, WrapTestStruct)> {
-    let (read_bytes, val) = read_typed::<TestStruct>(bytes)?;
-    Some((read_bytes, WrapTestStruct { inner: val }))
+    let val = TestStruct::ref_from_prefix(bytes)?;
+    Some((mem::size_of::<TestStruct>(), WrapTestStruct { inner: val }))
 }
 
 impl<'bytes> SearchableMarkerTrait<'bytes> for WrapTestStruct<'bytes> {

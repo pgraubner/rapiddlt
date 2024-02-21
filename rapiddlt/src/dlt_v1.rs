@@ -1,6 +1,6 @@
 
 use matchit::searchable::SearchableMarkerTrait;
-use matchit::{read_typed_offset, FromBytesReadableTrait, NoOffsetIterator};
+use matchit::{FromBytesReadableTrait, NoOffsetIterator};
 
 use zerocopy_derive::{AsBytes, FromBytes, FromZeroes};
 use zerocopy::{byteorder::big_endian::*, little_endian};
@@ -97,6 +97,9 @@ impl DltStandardHeader {
             header_type, message_counter, length: U16::from(length)
         }
     }
+    fn size() -> usize {
+        mem::size_of::<DltStandardHeader>()
+    }
 
     pub fn length(&self) -> usize {
         self.length.get() as usize
@@ -125,7 +128,11 @@ impl DltStorageHeader {
                 msecs: little_endian::I32::from(msecs),
                 ecu,
             }
-        }
+    }
+
+    fn size() -> usize {
+        mem::size_of::<DltStorageHeader>()
+    }
 }
 
 #[derive(AsBytes,FromBytes,FromZeroes,Debug)]
@@ -267,6 +274,10 @@ impl DltExtendedHeader {
     pub fn new(msin: MessageType, noar: u8, apid: [u8; 4], ctid: [u8; 4]) -> Self {
         Self { msin, noar, apid, ctid }
     }
+
+    fn size() -> usize {
+        mem::size_of::<DltExtendedHeader>()
+    }
 }
 
 use zerocopy::FromBytes;
@@ -283,12 +294,10 @@ pub struct DltStorageEntry<'bytes> {
 
 #[inline(always)]
 fn try_read(bytes: &[u8]) -> Option<(usize, DltStorageEntry)> {
-    let (size1, sh) = read_typed_offset::<DltStorageHeader>(bytes)?;
-    if (size1) > bytes.len() {
-        return None
-    }
-    let (size2, entry) = DltEntry::try_read(&bytes[size1..])?;
-    Some((size1+size2, DltStorageEntry {storage_header: sh, dlt: entry}))
+    let sh = DltStorageHeader::ref_from_prefix(bytes)?;
+    
+    let (size2, entry) = DltEntry::try_read(&bytes[DltStorageHeader::size()..])?;
+    Some((DltStorageHeader::size()+size2, DltStorageEntry {storage_header: sh, dlt: entry}))
 }
 
 impl<'bytes> SearchableMarkerTrait<'bytes> for DltStorageEntry<'bytes> {
@@ -366,7 +375,7 @@ impl<'bytes> DltEntry<'bytes> {
             return None
         }
         let mut offset = 0usize;
-        let result;
+
         if self.header.header_type.is_with_ecu_id() {
             offset += 4;
         }
@@ -376,8 +385,7 @@ impl<'bytes> DltEntry<'bytes> {
         if self.header.header_type.is_with_timestamp() {
             offset += 4;
         }
-        (_, result) = read_typed_offset::<DltExtendedHeader>(&self.tail[offset..])?;
-        Some(result)
+        DltExtendedHeader::ref_from_prefix(&self.tail[offset..])
     }
 
     #[inline(always)]
@@ -393,8 +401,8 @@ impl<'bytes> DltEntry<'bytes> {
             offset += 4;
         }
         if self.header.header_type.is_extended_header() {
-            let (off, _) = read_typed_offset::<DltExtendedHeader>(&self.tail[offset..])?;
-            offset += off;
+            DltExtendedHeader::ref_from_prefix(&self.tail[offset..])?;
+            offset += DltExtendedHeader::size();
         }
         if offset > self.tail.len() {
             return None
@@ -407,16 +415,13 @@ impl<'bytes> DltEntry<'bytes> {
 impl<'bytes> FromBytesReadableTrait<'bytes> for DltEntry<'bytes> {
     #[inline(always)]
     fn try_read(bytes: &'bytes [u8]) -> Option<(usize, Self)> {
-        let (size1, h) = read_typed_offset::<DltStandardHeader>(bytes)?;
-        if size1 > bytes.len() {
-            return None
-        }
+        let h = DltStandardHeader::ref_from_prefix(bytes)?;
         let size2 = h.length.get() as usize;
-        if size1 > bytes.len() || size2 > bytes.len() || size1 > size2 {
+        if DltStandardHeader::size() > size2 || size2 > bytes.len() {
             return None
         }
 
-        let p = &bytes[size1..size2];
+        let p = &bytes[DltStandardHeader::size()..size2];
         Some((size2, DltEntry {header: h, tail: p}))
     }
 
