@@ -1,9 +1,13 @@
+#[allow(unused_imports)]
+#[macro_use]
+extern crate lazy_static;
+
 use std::mem;
 
 use zerocopy::{big_endian::U32, FromBytes};
 use zerocopy_derive::{FromBytes, FromZeroes};
 
-use crate::{searchable::{SearchableMarkerTrait}, FromBytesReadableTrait};
+use matchit::{searchable::{SearchableMarkerTrait}, FromBytesReadableTrait};
 
 #[derive(Debug,FromBytes, FromZeroes)]
 pub struct TestStruct {
@@ -53,7 +57,7 @@ impl<'bytes> FromBytesReadableTrait<'bytes> for WrapTestStruct<'bytes> {
 #[cfg(test)]
 mod tests {
 
-    use crate::{searchable::{grepit::GrepIterator, readfallbackit::ReadFallbackIterator, searchit::{RevSearchIterator, SearchIterator}}, TIterator, WithOffset};
+    use matchit::{searchable::{grepit::GrepIterator, readfallbackit::ReadFallbackIterator, searchit::{RevSearchIterator, SearchIterator}}, TIterator, WithOffset};
 
     use super::*;
 

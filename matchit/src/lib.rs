@@ -1,7 +1,3 @@
-#[allow(unused_imports)]
-#[macro_use]
-extern crate lazy_static;
-
 pub mod searchable;
 pub mod generator;
 pub mod fromgenerator;
@@ -42,7 +38,7 @@ pub trait TIterator<'a> {
     fn new(bytes: &'a [u8], offset: usize) -> Self;
 }
 
-/// This trait implements methods to read a valid type ``T` from a slice of binary data with lifetime ``'bytes``.
+/// This trait implements methods to read a valid type ``T`` from a slice of binary data with lifetime ``'bytes``.
 pub trait FromBytesReadableTrait<'bytes>
 where
     Self: Sized

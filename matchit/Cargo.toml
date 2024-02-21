@@ -6,8 +6,5 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-zerocopy = "0.7.32"
-zerocopy-derive = "0.7.32"
 memchr = "2.3.1"
-lazy_static = "1.4.0"
 regex = "1.10.2"

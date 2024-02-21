@@ -2,8 +2,6 @@ pub mod grepit;
 pub mod readfallbackit;
 pub mod searchit;
 
-mod testit;
-
 use memchr::memmem;
 
 use crate::FromBytesReadableTrait;
