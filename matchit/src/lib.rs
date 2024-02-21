@@ -94,16 +94,25 @@ pub fn read_typed_offset<T>(bytes: &[u8]) -> Option<(usize, &T)>
     }
 }
 
+/// Stores a ``memchr::memmem::Finder`` for searching ``T::marker()`` patterns.
 pub struct ContainedBySearch<T>(Finder<'static>, PhantomData<T>);
 
 impl<'bytes, T> ContainedBySearch<T> 
 where
     T: SearchableMarkerTrait<'bytes>
 {
+    /// Initializes a ``memchr::memmem::Finder`` for searching ``T::marker()`` patterns.
     pub fn new() -> Self {
         Self(Finder::new(T::marker()), PhantomData)
     }
 
+    /// Recursively searches for a valid ``T``that contains the slice ``(payload.0 .. payload.1)``.
+    /// 
+    /// Let's assume ``T(payload)`` denotes that ``payload`` is contained by ``T``.
+    /// If a valid ``T0(payload)`` is found, the algorithm makes sure this is in turn not
+    /// contained by a previous ``T1(T0(payload))``.
+    /// This validity check is performed recursively until no containing ``T_n(...(T1(payload))`` 
+    /// is found anymore.
     #[inline(always)]
     pub fn contained_by(&self, bytes: &'bytes [u8], payload: (usize, usize)) -> Option<(usize, T)> 
     {
@@ -140,8 +149,7 @@ where
 }
 
 ///
-/// ``partition_from::<T>``: create ``num`` partitions from a raw byte slice
-///   in a way that valid Ts do not overlap between partitions.
+/// ``partition_from::<T>``: create ``num`` partitions from ``bytes `` so that no valid ``T`` spans over two partitions.
 /// 
 pub fn partition_from<'bytes, T: SearchableMarkerTrait<'bytes>>(bytes: &'bytes [u8], num: usize) -> Vec<&'bytes [u8]> {
     let mut result: Vec<&[u8]> = vec![];
